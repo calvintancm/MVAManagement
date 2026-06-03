@@ -1,0 +1,714 @@
+@model MVAManagement.ViewModels.Dashboard.DashboardViewModel
+@{
+    ViewData["Title"]             = "Dashboard";
+    ViewData["BreadcrumbSection"] = "Main";
+    ViewData["BreadcrumbPage"]    = "Dashboard";
+
+    Func<decimal, string> pctClass = v => v >= 0 ? "up" : "down";
+    Func<decimal, string> pctIcon  = v => v >= 0 ? "bi-arrow-up" : "bi-arrow-down";
+    Func<decimal, string> pctSign  = v => v >= 0 ? "+" : "";
+}
+
+@* ── Page Header ───────────────────────────────────────────────────────────── *@
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Case Management Dashboard</h1>
+        <p class="page-subtitle">
+            MVA Legal Case Overview &mdash; <strong>@Model.PeriodLabel</strong>
+        </p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <span class="mva-badge-period">@Model.PeriodLabel</span>
+
+        <select id="dashMonth" onchange="reloadDashboard()"
+                style="height:34px;border:1px solid #cbd5e1;border-radius:6px;
+                       padding:0 8px;font-size:12px;color:#1e293b;background:#fff;">
+            @for (int m = 1; m <= 12; m++)
+            {
+                <option value="@m" @@(m == Model.SelectedMonth ? "selected" : "")>
+                    @System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(m)
+                </option>
+            }
+        </select>
+
+        <select id="dashYear" onchange="reloadDashboard()"
+                style="height:34px;border:1px solid #cbd5e1;border-radius:6px;
+                       padding:0 8px;font-size:12px;color:#1e293b;background:#fff;">
+            @for (int y = DateTime.Now.Year - 3; y <= DateTime.Now.Year; y++)
+            {
+                <option value="@y" @@(y == Model.SelectedYear ? "selected" : "")>@y</option>
+            }
+        </select>
+
+        <button class="btn-ptc-outline" onclick="reloadDashboard()">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+        </button>
+    </div>
+</div>
+
+@* ── Limitation Alert Strip (shown only when there are near-expiry cases) ─── *@
+@if (Model.LimitationAlerts.Any())
+{
+    <div class="mva-alert-strip">
+        <span class="mva-alert-icon"><i class="bi bi-exclamation-octagon-fill"></i></span>
+        <strong>Statute of Limitations Warning:</strong>&nbsp;
+        @Model.LimitationAlerts.Count case(s) expiring within 90 days —
+        @foreach (var a in Model.LimitationAlerts.Take(3))
+        {
+            <span class="mva-alert-pill @(a.IsExpired ? "expired" : "")">
+                @a.FileNumber (@(a.IsExpired ? "EXPIRED" : $"{a.DaysRemaining}d"))
+            </span>
+        }
+        @if (Model.LimitationAlerts.Count > 3)
+        {
+            <span class="mva-alert-pill">+@(Model.LimitationAlerts.Count - 3) more</span>
+        }
+    </div>
+}
+
+@* ── KPI Cards ──────────────────────────────────────────────────────────────── *@
+<div class="row g-3 mb-4 d-flex align-items-stretch">
+
+    @* Total Active Cases *@
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card blue" style="height:120px;">
+            <div class="stat-icon blue"><i class="bi bi-folder2-open"></i></div>
+            <div style="flex:1">
+                <div class="stat-value">@Model.Kpi.TotalActiveCases</div>
+                <div class="stat-label">Active Case Files</div>
+                <div class="stat-trend @pctClass(Model.Kpi.ActiveCasesPctChange)">
+                    <i class="bi @pctIcon(Model.Kpi.ActiveCasesPctChange)"></i>
+                    @pctSign(Model.Kpi.ActiveCasesPctChange)@Model.Kpi.ActiveCasesPctChange% vs last month
+                    &nbsp;|&nbsp; @Model.Kpi.NewCasesThisMonth new
+                </div>
+            </div>
+            <i class="bi bi-folder2-open stat-bg-icon"></i>
+        </div>
+    </div>
+
+    @* In Litigation *@
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card red" style="height:120px;">
+            <div class="stat-icon red"><i class="bi bi-bank2"></i></div>
+            <div style="flex:1">
+                <div class="stat-value">@Model.Kpi.InLitigationCount</div>
+                <div class="stat-label">In Litigation</div>
+                <div class="stat-trend neutral">
+                    <i class="bi bi-calendar-event"></i>
+                    @Model.Kpi.PendingHearingsCount hearing(s) in 30 days
+                    &nbsp;|&nbsp; @Model.Kpi.ClosedCasesThisMonth closed
+                </div>
+            </div>
+            <i class="bi bi-bank2 stat-bg-icon"></i>
+        </div>
+    </div>
+
+    @* Total Claimed Amount *@
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card orange" style="height:120px;">
+            <div class="stat-icon orange"><i class="bi bi-currency-dollar"></i></div>
+            <div style="flex:1">
+                <div class="stat-value">RM @Model.Kpi.TotalClaimedAmount.ToString("N0")</div>
+                <div class="stat-label">Total Claimed (Active)</div>
+                <div class="stat-trend neutral">
+                    <i class="bi bi-arrow-left-right"></i>
+                    Avg settlement: RM @Model.Kpi.AvgSettlementValue.ToString("N0")
+                </div>
+            </div>
+            <i class="bi bi-currency-dollar stat-bg-icon"></i>
+        </div>
+    </div>
+
+    @* Risk / Alerts *@
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card @(Model.Kpi.LimitationDueIn90Days > 0 ? "red" : "green")" style="height:120px;">
+            <div class="stat-icon @(Model.Kpi.LimitationDueIn90Days > 0 ? "red" : "green")">
+                <i class="bi bi-shield-exclamation"></i>
+            </div>
+            <div style="flex:1">
+                <div class="stat-value">@Model.Kpi.LimitationDueIn90Days</div>
+                <div class="stat-label">Limitation Alerts (90d)</div>
+                <div class="stat-trend @(Model.Kpi.MedicalReportsPending > 0 ? "down" : "neutral")">
+                    <i class="bi bi-file-medical"></i>
+                    @Model.Kpi.MedicalReportsPending med. reports pending
+                    &nbsp;|&nbsp; @Model.Kpi.DocumentsOutstanding docs outstanding
+                </div>
+            </div>
+            <i class="bi bi-shield-exclamation stat-bg-icon"></i>
+        </div>
+    </div>
+</div>
+
+@* ── Row 2 — Active Case Grid + Status Donut ────────────────────────────────── *@
+<div class="row g-3 mb-3">
+
+    @* Active Case Grid *@
+    <div class="col-xl-8">
+        <div class="mva-card">
+            <div class="mva-card-hd">
+                <span>Active Case Files</span>
+                <span class="mva-card-sub">Most recently created — @Model.PeriodLabel</span>
+            </div>
+            <div id="caseGrid"></div>
+        </div>
+    </div>
+
+    @* Status Mix Donut *@
+    <div class="col-xl-4">
+        <div class="mva-card h-100">
+            <div class="mva-card-hd">
+                <span>Case Status Distribution</span>
+                <span class="mva-card-sub">Active portfolio</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
+                <canvas id="donutCanvas" width="90" height="90"></canvas>
+                <div id="donutLegend" style="flex:1;font-size:12px"></div>
+            </div>
+            <div style="font-size:11px;font-weight:500;color:var(--text-muted);
+                        text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
+                Financial Summary
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <span class="mva-tag lit">Claimed: RM @Model.Kpi.TotalClaimedAmount.ToString("N0")</span>
+                <span class="mva-tag set">Settled: RM @Model.Kpi.TotalSettledAmount.ToString("N0")</span>
+                <span class="mva-tag dis">Disbursed: RM @Model.Kpi.TotalDisbursements.ToString("N0")</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* ── Row 3 — Upcoming Hearings + Settlement Funnel ──────────────────────────── *@
+<div class="row g-3 mb-3">
+
+    @* Upcoming Hearings *@
+    <div class="col-xl-6">
+        <div class="mva-card">
+            <div class="mva-card-hd">
+                <span>Upcoming Court Hearings</span>
+                <span class="mva-card-sub">Next 30 days</span>
+            </div>
+            @if (!Model.UpcomingHearings.Any())
+            {
+                <div class="mva-empty">No hearings scheduled in the next 30 days</div>
+            }
+            @foreach (var h in Model.UpcomingHearings)
+            {
+                <div class="hearing-row">
+                    <div class="hearing-date-block @h.UrgencyClass">
+                        <span class="hearing-day">@h.HearingDay</span>
+                        <span class="hearing-dt">@h.HearingDateStr</span>
+                    </div>
+                    <div style="flex:1;min-width:0">
+                        <div style="font-size:12px;font-weight:600;color:var(--color-text-primary);
+                                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                            @h.FileNumber &mdash; @h.ClaimantName
+                        </div>
+                        <div style="font-size:11px;color:var(--color-text-secondary)">
+                            @h.CourtVenue
+                        </div>
+                    </div>
+                    <div style="text-align:right;flex-shrink:0">
+                        <span class="mva-tag stage-@h.StageCode.ToLower()">@h.HearingStage</span>
+                        <div style="font-size:10px;color:var(--color-text-secondary);margin-top:2px">
+                            @(h.DaysFromToday == 0 ? "Today" : $"in {h.DaysFromToday}d")
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    @* Settlement Funnel *@
+    <div class="col-xl-6">
+        <div class="mva-card">
+            <div class="mva-card-hd">
+                <span>Case Pipeline by Status</span>
+                <span class="mva-card-sub">Active cases &amp; claimed values</span>
+            </div>
+            @if (!Model.SettlementFunnel.Any())
+            {
+                <div class="mva-empty">No funnel data available</div>
+            }
+            @foreach (var f in Model.SettlementFunnel)
+            {
+                <div class="funnel-row">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+                        <div style="display:flex;align-items:center;gap:8px">
+                            <span style="width:9px;height:9px;border-radius:50%;
+                                         background:@f.HexColor;flex-shrink:0;display:inline-block"></span>
+                            <span style="font-size:12px;color:var(--color-text-primary)">@f.StatusLabel</span>
+                        </div>
+                        <div style="font-size:11px;color:var(--color-text-secondary)">
+                            @f.CaseCount case(s) &nbsp;&bull;&nbsp; RM @f.TotalClaimed.ToString("N0") claimed
+                            @if (f.OfferRatioPct > 0)
+                            {
+                                <span style="color:@f.HexColor;font-weight:600">
+                                    &nbsp;(@f.OfferRatioPct%&nbsp;offered)
+                                </span>
+                            }
+                        </div>
+                    </div>
+                    <div class="funnel-bar-wrap">
+                        <div class="funnel-bar" style="width:@f.BarWidthPct%;background:@f.HexColor"></div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@* ── Row 4 — Caseworker Workload + Disbursement Chart ───────────────────────── *@
+<div class="row g-3 mb-3">
+
+    @* Caseworker Workload *@
+    <div class="col-xl-7">
+        <div class="mva-card">
+            <div class="mva-card-hd">
+                <span>Caseworker Workload</span>
+                <span class="mva-card-sub">Active case distribution</span>
+            </div>
+            @if (!Model.WorkloadRows.Any())
+            {
+                <div class="mva-empty">No caseworker data available</div>
+            }
+            <table class="mva-table">
+                <thead>
+                    <tr>
+                        <th>Caseworker</th>
+                        <th style="text-align:right">Cases</th>
+                        <th style="text-align:right">Litigation</th>
+                        <th style="text-align:right">Hearings</th>
+                        <th style="text-align:right">Alerts</th>
+                        <th>Load</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.WorkloadRows.Any())
+                    {
+                        <tr><td colspan="6" class="mva-empty">No data</td></tr>
+                    }
+                    @foreach (var w in Model.WorkloadRows)
+                    {
+                        <tr>
+                            <td>
+                                <div style="display:flex;align-items:center;gap:8px">
+                                    <div class="mva-avatar @w.AvatarClass">@w.Initials</div>
+                                    <div>
+                                        <div style="font-size:12px;font-weight:600;color:var(--color-text-primary)">@w.FullName</div>
+                                        <div style="font-size:10px;color:var(--color-text-secondary)">@w.JobRole</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td style="text-align:right;font-weight:600">@w.ActiveCases</td>
+                            <td style="text-align:right">
+                                @if (w.InLitigation > 0)
+                                {
+                                    <span class="mva-tag lit">@w.InLitigation</span>
+                                }
+                                else { <span style="color:var(--color-text-secondary)">—</span> }
+                            </td>
+                            <td style="text-align:right">
+                                @if (w.UpcomingHearings > 0)
+                                {
+                                    <span class="mva-tag soon">@w.UpcomingHearings</span>
+                                }
+                                else { <span style="color:var(--color-text-secondary)">—</span> }
+                            </td>
+                            <td style="text-align:right">
+                                @if (w.LimitationAlerts > 0)
+                                {
+                                    <span class="mva-tag expired">@w.LimitationAlerts</span>
+                                }
+                                else { <span style="color:var(--color-text-secondary)">—</span> }
+                            </td>
+                            <td style="min-width:80px">
+                                <div style="display:flex;align-items:center;gap:6px">
+                                    <div style="flex:1;height:5px;background:#f1f5f9;border-radius:3px;overflow:hidden">
+                                        <div style="height:100%;border-radius:3px;width:@w.LoadPct%;
+                                                     background:@(w.LoadClass == "high" ? "#DC2626" : w.LoadClass == "medium" ? "#F59E0B" : "#16A34A")">
+                                        </div>
+                                    </div>
+                                    <span style="font-size:10px;color:var(--color-text-secondary);width:28px">@w.LoadPct%</span>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @* Disbursement Chart *@
+    <div class="col-xl-5">
+        <div class="mva-card h-100">
+            <div class="mva-card-hd">
+                <span>Disbursements by Category</span>
+                <span class="mva-card-sub">@Model.PeriodLabel</span>
+            </div>
+            <div id="disbChart"></div>
+        </div>
+    </div>
+</div>
+
+@* ── Footer ──────────────────────────────────────────────────────────────────── *@
+<div class="mva-footer">
+    Period: @Model.PeriodLabel &nbsp;&bull;&nbsp; MVA Legal Case Management System &nbsp;&bull;&nbsp; Data as of @DateTime.Now.ToString("dd MMM yyyy HH:mm") UTC
+</div>
+
+@* ── Styles ───────────────────────────────────────────────────────────────────── *@
+<style>
+    /* Period badge */
+    .mva-badge-period { font-size:11px;font-weight:500;background:#E6F1FB;color:#185FA5;padding:4px 12px;border-radius:20px }
+
+    /* Alert strip */
+    .mva-alert-strip {
+        background:#FEF2F2;border:1px solid #FECACA;border-left:4px solid #DC2626;
+        border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:12px;
+        display:flex;align-items:center;flex-wrap:wrap;gap:6px;color:#7F1D1D
+    }
+    .mva-alert-icon { color:#DC2626;font-size:15px;margin-right:2px }
+    .mva-alert-pill {
+        display:inline-block;background:#FEE2E2;color:#991B1B;border:1px solid #FECACA;
+        padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600
+    }
+    .mva-alert-pill.expired { background:#DC2626;color:#fff;border-color:#DC2626 }
+
+    /* Cards */
+    .mva-card    { background:var(--bs-body-bg,#fff);border:1px solid rgba(0,0,0,.08);border-radius:10px;padding:16px 18px;height:100% }
+    .mva-card-hd { display:flex;align-items:center;justify-content:space-between;font-size:13px;font-weight:600;color:var(--bs-body-color,#1e293b);margin-bottom:14px }
+    .mva-card-sub{ font-size:11px;font-weight:400;color:#94a3b8 }
+
+    /* Table */
+    .mva-table   { width:100%;border-collapse:collapse;font-size:12px }
+    .mva-table th{ font-size:10px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;padding:0 0 8px;text-align:left;border-bottom:1px solid rgba(0,0,0,.07) }
+    .mva-table td{ padding:8px 0;border-bottom:1px solid rgba(0,0,0,.05);vertical-align:middle;color:var(--bs-body-color,#1e293b) }
+    .mva-table tr:last-child td { border-bottom:none }
+    .mva-empty   { font-size:12px;color:#94a3b8;padding:12px 0;text-align:center }
+
+    /* Avatar */
+    .mva-avatar    { width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0 }
+    .av-blue       { background:#B5D4F4;color:#0C447C }
+    .av-green      { background:#9FE1CB;color:#085041 }
+    .av-amber      { background:#FAC775;color:#633806 }
+    .av-rose       { background:#F5C4B3;color:#712B13 }
+    .av-violet     { background:#DDD6FE;color:#5B21B6 }
+    .av-teal       { background:#A5F3FC;color:#0E7490 }
+
+    /* Tags */
+    .mva-tag         { display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px }
+    .mva-tag.act     { background:#E6F1FB;color:#185FA5 }
+    .mva-tag.neg     { background:#FEF3C7;color:#92400E }
+    .mva-tag.lit     { background:#FEE2E2;color:#991B1B }
+    .mva-tag.set     { background:#DCFCE7;color:#166534 }
+    .mva-tag.clo     { background:#F1F5F9;color:#475569 }
+    .mva-tag.dis     { background:#F3E8FF;color:#6B21A8 }
+    .mva-tag.soon    { background:#FEF3C7;color:#92400E }
+    .mva-tag.expired { background:#DC2626;color:#fff }
+    .mva-tag.stage-m { background:#E6F1FB;color:#185FA5 }
+    .mva-tag.stage-h { background:#FEE2E2;color:#991B1B }
+    .mva-tag.stage-cm{ background:#DCFCE7;color:#166534 }
+    .mva-tag.stage-sc{ background:#F3E8FF;color:#6B21A8 }
+
+    /* Hearing rows */
+    .hearing-row { display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid rgba(0,0,0,.05) }
+    .hearing-row:last-child { border-bottom:none }
+    .hearing-date-block {
+        text-align:center;width:60px;flex-shrink:0;padding:6px 4px;border-radius:8px;
+        background:#F8FAFC;border:1px solid #E2E8F0
+    }
+    .hearing-date-block.urgent { background:#FEE2E2;border-color:#FECACA }
+    .hearing-date-block.soon   { background:#FEF3C7;border-color:#FDE68A }
+    .hearing-date-block.ok     { background:#E6F1FB;border-color:#BFDBFE }
+    .hearing-day { display:block;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#64748B }
+    .hearing-dt  { display:block;font-size:10px;font-weight:700;color:#1E293B;margin-top:1px }
+
+    /* Funnel bars */
+    .funnel-row      { padding:6px 0;border-bottom:1px solid rgba(0,0,0,.05) }
+    .funnel-row:last-child { border-bottom:none }
+    .funnel-bar-wrap { height:5px;background:#F1F5F9;border-radius:3px;overflow:hidden }
+    .funnel-bar      { height:100%;border-radius:3px;transition:width .6s ease }
+
+    /* Disbursement chart */
+    .disb-row      { display:flex;align-items:center;padding:6px 0;border-bottom:1px solid rgba(0,0,0,.05);font-size:12px }
+    .disb-row:last-child { border-bottom:none }
+    .disb-label    { flex:1;color:var(--color-text-primary,#1e293b) }
+    .disb-bar-wrap { width:80px;height:5px;background:#F1F5F9;border-radius:3px;overflow:hidden;margin:0 10px }
+    .disb-bar      { height:100%;border-radius:3px }
+    .disb-amt      { font-weight:600;font-size:11px;width:80px;text-align:right;color:var(--color-text-primary,#1e293b);flex-shrink:0 }
+
+    /* Footer */
+    .mva-footer { font-size:11px;color:#94a3b8;text-align:center;padding:14px 0 4px;border-top:1px solid rgba(0,0,0,.07);margin-top:8px }
+</style>
+
+@section Scripts {
+<script>
+    // ── Pre-serialised JSON from controller ───────────────────────────────────
+    var caseRows  = @Html.Raw(ViewBag.CaseRowsJson  ?? "[]");
+    var statusMix = @Html.Raw(ViewBag.StatusMixJson ?? "[]");
+    var disbData  = @Html.Raw(ViewBag.DisbursementChartJson ?? "[]");
+
+$(function () {
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       CASE GRID — Kendo UI 2019
+       RULE: any column containing quotes, HTML attributes, or dynamic
+             expressions MUST use a function reference, NOT a string template.
+             String templates with single-quotes break Kendo 2019's tokeniser.
+    ═══════════════════════════════════════════════════════════════════════ */
+    $('#caseGrid').kendoGrid({
+        dataSource: {
+            data: caseRows,
+            pageSize: 8,
+            schema: {
+                model: {
+                    fields: {
+                        id:                 { type: 'number' },
+                        fileNumber:         { type: 'string' },
+                        claimantName:       { type: 'string' },
+                        initials:           { type: 'string' },
+                        avatarClass:        { type: 'string' },
+                        statusName:         { type: 'string' },
+                        statusCode:         { type: 'string' },
+                        assignedCaseworker: { type: 'string' },
+                        accidentDate:       { type: 'string' },
+                        claimedAmount:      { type: 'number' },
+                        currentOffer:       { type: 'number' },
+                        isInLitigation:     { type: 'boolean' },
+                        isLimitationExpired:{ type: 'boolean' },
+                        daysToLimitation:   { type: 'number' },
+                        nextHearingDate:    { type: 'string' },
+                        hearingStage:       { type: 'string' }
+                    }
+                }
+            }
+        },
+        columns: [
+            {
+                title: 'File',
+                field: 'fileNumber',
+                width: 150,
+                // Function reference — avoids single-quote breakage in onclick
+                template: function (d) {
+                    // Avatar colour lookup map (no string templates with quotes)
+                    var bgMap = {
+                        'av-blue':   '#B5D4F4', 'av-green':  '#9FE1CB',
+                        'av-amber':  '#FAC775', 'av-rose':   '#F5C4B3',
+                        'av-violet': '#DDD6FE', 'av-teal':   '#A5F3FC'
+                    };
+                    var clrMap = {
+                        'av-blue':   '#0C447C', 'av-green':  '#085041',
+                        'av-amber':  '#633806', 'av-rose':   '#712B13',
+                        'av-violet': '#5B21B6', 'av-teal':   '#0E7490'
+                    };
+                    var bg  = bgMap[d.avatarClass]  || '#B5D4F4';
+                    var clr = clrMap[d.avatarClass] || '#0C447C';
+                    return '<div style="display:flex;align-items:center;gap:8px">'
+                         + '<div style="width:26px;height:26px;border-radius:50%;display:flex;'
+                         + 'align-items:center;justify-content:center;font-size:10px;font-weight:700;'
+                         + 'flex-shrink:0;background:' + bg + ';color:' + clr + '">'
+                         + kendo.htmlEncode(d.initials) + '</div>'
+                         + '<div><div style="font-size:12px;font-weight:600">'
+                         + '<a href="/CaseFile/Details/' + d.id + '" style="color:inherit;text-decoration:none">'
+                         + kendo.htmlEncode(d.fileNumber) + '</a></div>'
+                         + '<div style="font-size:10px;color:#94a3b8">'
+                         + kendo.htmlEncode(d.claimantName) + '</div></div></div>';
+                }
+            },
+            {
+                title: 'Status',
+                field: 'statusName',
+                width: 110,
+                template: function (d) {
+                    // Map status code → CSS class (no inline quotes in template string)
+                    var cssMap = {
+                        'ACT': 'act', 'NEG': 'neg', 'LIT': 'lit',
+                        'SET': 'set', 'CLO': 'clo', 'WIT': 'clo', 'HLD': 'neg'
+                    };
+                    var cls = cssMap[d.statusCode] || 'act';
+                    var litBadge = d.isInLitigation
+                        ? '<span style="display:inline-block;margin-left:4px;font-size:9px;'
+                          + 'font-weight:700;background:#FEE2E2;color:#991B1B;padding:1px 5px;'
+                          + 'border-radius:8px">LIT</span>'
+                        : '';
+                    return '<span class="mva-tag ' + cls + '">'
+                         + kendo.htmlEncode(d.statusName) + '</span>' + litBadge;
+                }
+            },
+            {
+                title: 'Accident Date',
+                field: 'accidentDate',
+                width: 110,
+                template: function (d) {
+                    if (!d.accidentDate) return '<span style="color:#94a3b8">—</span>';
+                    return '<span style="font-size:12px">' + kendo.htmlEncode(d.accidentDate) + '</span>';
+                }
+            },
+            {
+                title: 'Claimed (RM)',
+                field: 'claimedAmount',
+                width: 110,
+                attributes:       { style: 'text-align:right' },
+                headerAttributes: { style: 'text-align:right' },
+                template: function (d) {
+                    var fmt = kendo.toString(d.claimedAmount, 'N0');
+                    return '<span style="font-weight:600;font-size:12px">RM ' + fmt + '</span>';
+                }
+            },
+            {
+                title: 'Curr. Offer (RM)',
+                field: 'currentOffer',
+                width: 115,
+                attributes:       { style: 'text-align:right' },
+                headerAttributes: { style: 'text-align:right' },
+                template: function (d) {
+                    if (!d.currentOffer || d.currentOffer === 0)
+                        return '<span style="color:#94a3b8;font-size:12px">No offer</span>';
+                    var pct = d.claimedAmount > 0
+                        ? Math.round(d.currentOffer / d.claimedAmount * 100) + '%'
+                        : '';
+                    return '<span style="font-weight:600;font-size:12px">RM ' + kendo.toString(d.currentOffer, 'N0') + '</span>'
+                         + '<div style="font-size:10px;color:#64748b">' + pct + ' of claim</div>';
+                }
+            },
+            {
+                title: 'Next Hearing',
+                field: 'nextHearingDate',
+                width: 120,
+                template: function (d) {
+                    if (!d.nextHearingDate)
+                        return '<span style="color:#94a3b8;font-size:12px">None</span>';
+                    var stageBadge = d.hearingStage
+                        ? '<span style="display:inline-block;margin-left:4px;font-size:9px;font-weight:700;'
+                          + 'background:#E6F1FB;color:#185FA5;padding:1px 5px;border-radius:8px">'
+                          + kendo.htmlEncode(d.hearingStage) + '</span>'
+                        : '';
+                    return '<span style="font-size:12px">' + kendo.htmlEncode(d.nextHearingDate) + '</span>' + stageBadge;
+                }
+            },
+            {
+                title: 'Limitation',
+                field: 'daysToLimitation',
+                width: 100,
+                attributes:       { style: 'text-align:center' },
+                headerAttributes: { style: 'text-align:center' },
+                template: function (d) {
+                    if (d.daysToLimitation === 9999)
+                        return '<span style="color:#94a3b8;font-size:12px">N/A</span>';
+                    if (d.isLimitationExpired)
+                        return '<span style="display:inline-block;background:#DC2626;color:#fff;'
+                             + 'font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px">EXPIRED</span>';
+                    if (d.daysToLimitation <= 90)
+                        return '<span style="display:inline-block;background:#FEE2E2;color:#991B1B;'
+                             + 'font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px">'
+                             + d.daysToLimitation + 'd</span>';
+                    return '<span style="font-size:12px;color:#64748b">' + d.daysToLimitation + 'd</span>';
+                }
+            },
+            {
+                title: '',
+                width: 70,
+                template: function (d) {
+                    // onclick uses JS concatenation — NO inline single quotes in onclick attr
+                    return '<a href="/CaseFile/Details/' + d.id + '" '
+                         + 'style="font-size:11px;color:#185FA5;text-decoration:none;font-weight:500">'
+                         + 'Open</a>';
+                }
+            }
+        ],
+        pageable:   { buttonCount: 4 },
+        sortable:   true,
+        scrollable: false
+    });
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       STATUS DONUT CHART
+    ═══════════════════════════════════════════════════════════════════════ */
+    (function buildDonut() {
+        var canvas = document.getElementById('donutCanvas');
+        if (!canvas) return;
+        var ctx  = canvas.getContext('2d');
+        var data = statusMix;
+
+        if (!data || !data.length) {
+            ctx.fillStyle = '#e2e8f0';
+            ctx.beginPath(); ctx.arc(45, 45, 36, 0, 2 * Math.PI); ctx.fill();
+            ctx.beginPath(); ctx.arc(45, 45, 22, 0, 2 * Math.PI);
+            ctx.fillStyle = '#fff'; ctx.fill();
+            return;
+        }
+
+        var total = data.reduce(function (s, d) { return s + d.count; }, 0);
+        var angle = -Math.PI / 2;
+        var cx = 45, cy = 45, ro = 36, ri = 22;
+
+        data.forEach(function (seg) {
+            var sweep = (seg.count / total) * 2 * Math.PI;
+            ctx.beginPath();
+            ctx.moveTo(cx + ri * Math.cos(angle), cy + ri * Math.sin(angle));
+            ctx.arc(cx, cy, ro, angle, angle + sweep);
+            ctx.arc(cx, cy, ri, angle + sweep, angle, true);
+            ctx.closePath();
+            ctx.fillStyle = seg.hexColor;
+            ctx.fill();
+            angle += sweep;
+        });
+
+        // Centre total label
+        ctx.fillStyle    = getComputedStyle(document.documentElement)
+                           .getPropertyValue('--bs-body-color') || '#1e293b';
+        ctx.font         = '700 11px sans-serif';
+        ctx.textAlign    = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(total, cx, cy);
+
+        // Legend
+        var legend = document.getElementById('donutLegend');
+        data.forEach(function (seg) {
+            var pct = Math.round(seg.count / total * 100);
+            legend.innerHTML +=
+                '<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">'
+              + '<span style="width:8px;height:8px;border-radius:50%;background:'
+              + seg.hexColor + ';flex-shrink:0"></span>'
+              + '<span style="color:#64748b;flex:1">' + seg.label + '</span>'
+              + '<span style="font-weight:700;color:' + seg.hexColor + '">' + seg.count
+              + '</span>'
+              + '<span style="font-size:10px;color:#94a3b8;width:32px;text-align:right">(' + pct + '%)</span>'
+              + '</div>';
+        });
+    })();
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       DISBURSEMENT BAR CHART (pure DOM — no canvas / third-party needed)
+    ═══════════════════════════════════════════════════════════════════════ */
+    (function buildDisbChart() {
+        var container = document.getElementById('disbChart');
+        if (!container || !disbData || !disbData.length) {
+            container.innerHTML = '<div class="mva-empty">No disbursement data for this period</div>';
+            return;
+        }
+        var html = '';
+        disbData.forEach(function (seg) {
+            var amt = 'RM ' + kendo.toString(seg.total, 'N0');
+            html += '<div class="disb-row">'
+                  + '<div class="disb-label">' + seg.category + '<div style="font-size:10px;color:#94a3b8">'
+                  + seg.count + ' transaction(s)</div></div>'
+                  + '<div class="disb-bar-wrap">'
+                  + '<div class="disb-bar" style="width:' + seg.barWidthPct + '%;background:' + seg.hexColor + '"></div>'
+                  + '</div>'
+                  + '<div class="disb-amt" style="color:' + seg.hexColor + '">' + amt + '</div>'
+                  + '</div>';
+        });
+        container.innerHTML = html;
+    })();
+
+});
+
+// ── Month / year reload ───────────────────────────────────────────────────────
+function reloadDashboard() {
+    var month = document.getElementById('dashMonth').value;
+    var year  = document.getElementById('dashYear').value;
+    window.location.href = '@Url.Action("Index", "Dashboard")'
+        + '?selectedMonth=' + month + '&selectedYear=' + year;
+}
+</script>
+}

@@ -1,0 +1,949 @@
+@model MVAManagement.Models.LoginViewModel
+@{
+    ViewData["Title"] = "Sign In";
+    ViewData["BreadcrumbSection"] = "Account";
+    ViewData["BreadcrumbPage"] = "Sign In";
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign In — PTC IGH System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/11.10.1/sweetalert2.all.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/11.10.1/sweetalert2.min.css" />
+    <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --navy: #0a1628;
+            --navy-mid: #112240;
+            --navy-card: #162845;
+            --accent: #e8a020;
+            --accent-lt: #f5c15e;
+            --white: #ffffff;
+            --white: #ffffff;
+            --cyan: #00bcd4; 
+            --muted: #7a93b4;
+            --muted-lt: #9bbdd4;
+            --border: rgba(255,255,255,0.08);
+            --input-bg: rgba(255,255,255,0.05);
+            --error: #ff6b6b;
+            --success: #4ecdc4;
+            --radius: 14px;
+            --shadow: 0 32px 80px rgba(0,0,0,0.45);
+        }
+
+        html, body {
+            height: 100%;
+            font-family: 'DM Sans', sans-serif;
+            background: var(--navy);
+            color: var(--white);
+            overflow: hidden;
+        }
+
+        /* ── LAYOUT ─────────────────────────────── */
+        .login-wrapper {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* ── LEFT PANEL — Illustration ──────────── */
+        .panel-left {
+            flex: 1.1;
+            position: relative;
+            background: linear-gradient(145deg, #0d1f3c 0%, #0a1628 60%, #081422 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            padding: 48px;
+        }
+
+        /* Animated background orbs */
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.18;
+            animation: float 8s ease-in-out infinite;
+        }
+
+        .orb-1 {
+            width: 420px;
+            height: 420px;
+            background: radial-gradient(circle, #e8a020, #f5c15e);
+            top: -80px;
+            left: -80px;
+            animation-delay: 0s;
+        }
+
+        .orb-2 {
+            width: 320px;
+            height: 320px;
+            background: radial-gradient(circle, #1a6fdb, #0d3d8e);
+            bottom: 60px;
+            right: -60px;
+            animation-delay: -3s;
+        }
+
+        .orb-3 {
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, #e8a020, transparent);
+            bottom: 200px;
+            left: 80px;
+            animation-delay: -6s;
+            opacity: 0.1;
+        }
+
+        @@keyframes float {
+            0%, 100% {
+                transform: translateY(0px) scale(1);
+            }
+
+            50% {
+                transform: translateY(-28px) scale(1.04);
+            }
+        }
+
+        /* Grid lines decoration */
+        .grid-lines {
+            position: absolute;
+            inset: 0;
+            background-image: linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+            background-size: 48px 48px;
+        }
+
+        /* Illustration SVG area */
+        .illustration-wrap {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 40px;
+        }
+
+        .illustration-svg {
+            width: 340px;
+            height: auto;
+            filter: drop-shadow(0 20px 60px rgba(232,160,32,0.2));
+            animation: hover-svg 5s ease-in-out infinite;
+        }
+
+        @@keyframes hover-svg {
+            0%, 100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-12px);
+            }
+        }
+
+        .brand-block {
+            text-align: center;
+        }
+
+        .brand-logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .brand-icon {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-lt));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+            .brand-icon svg {
+                width: 24px;
+                height: 24px;
+                fill: white;
+            }
+
+        .brand-name {
+            font-family: 'Sora', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--white);
+            letter-spacing: -0.3px;
+        }
+
+        .brand-tagline {
+            font-size: 0.95rem;
+            color: var(--muted);
+            font-weight: 300;
+            line-height: 1.6;
+            max-width: 320px;
+        }
+
+        /* Stats row */
+        .stats-row {
+            display: flex;
+            gap: 32px;
+            margin-top: 8px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-num {
+            font-family: 'Sora', sans-serif;
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--accent);
+            display: block;
+        }
+
+        .stat-label {
+            font-size: 0.72rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        /* ── RIGHT PANEL — Login Form ────────────── */
+        .panel-right {
+            flex: 0.9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--navy-mid);
+            position: relative;
+            padding: 48px 56px;
+        }
+
+            /* Subtle top accent line */
+        .panel-right::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+        }
+
+        /* Form card */
+        .form-card {
+            width: 100%;
+            max-width: 390px;
+            position: relative;
+            z-index: 1;
+            animation: slide-up 0.55s cubic-bezier(0.22,1,0.36,1) both;
+        }
+
+        @@keyframes slide-up {
+            from {
+                opacity: 0;
+                transform: translateY(26px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Form header */
+        .form-header {
+            margin-bottom: 38px;
+        }
+
+        .form-eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--cyan);
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            margin-bottom: 12px;
+        }
+
+        .eyebrow-line {
+            width: 24px;
+            height: 1.5px;
+            background: var(--cyan);
+            border-radius: 2px;
+        }
+
+        .form-title {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--white);
+            line-height: 1.12;
+            margin-bottom: 10px;
+            letter-spacing: -0.5px;
+        }
+
+        .form-title span {
+            color: var(--cyan);
+        }
+
+        .form-subtitle {
+            font-size: 0.88rem;
+            color: var(--muted-lt);
+            font-weight: 300;
+            line-height: 1.5;
+        }
+
+        .ssl-icon {
+            width: 100px;
+            height: auto;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+
+
+        /* Alert */
+        .alert-error {
+            background: rgba(255, 107, 107, 0.1);
+            border: 1px solid rgba(255, 107, 107, 0.3);
+            border-left: 3px solid var(--error);
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-bottom: 28px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            animation: shake 0.4s ease;
+        }
+
+        @@keyframes shake {
+            0%, 100% {
+                transform: translateX(0);
+            }
+
+            20% {
+                transform: translateX(-6px);
+            }
+
+            40% {
+                transform: translateX(6px);
+            }
+
+            60% {
+                transform: translateX(-4px);
+            }
+
+            80% {
+                transform: translateX(4px);
+            }
+        }
+
+        .alert-error-icon {
+            color: var(--error);
+            font-size: 1rem;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        .alert-error-text {
+            font-size: 0.875rem;
+            color: #ffaaaa;
+            line-height: 1.4;
+        }
+
+        /* Field groups */
+        .field-group {
+            margin-bottom: 22px;
+        }
+
+        .field-label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 8px;
+        }
+
+        .field-wrap {
+            position: relative;
+        }
+
+        .field-icon {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--muted);
+            display: flex;
+            align-items: center;
+            pointer-events: none;
+            transition: color 0.2s;
+        }
+
+            .field-icon svg {
+                width: 17px;
+                height: 17px;
+            }
+
+        .field-input {
+            width: 100%;
+            background: var(--input-bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px 16px 14px 46px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.95rem;
+            color: var(--white);
+            outline: none;
+            transition: border-color 0.25s, background 0.25s, box-shadow 0.25s;
+            -webkit-appearance: none;
+        }
+
+            .field-input::placeholder {
+                color: #3d5a7a;
+            }
+
+            .field-input:focus {
+                border-color: var(--accent);
+                background: rgba(232, 160, 32, 0.06);
+                box-shadow: 0 0 0 4px rgba(232, 160, 32, 0.1);
+            }
+
+                .field-input:focus + .field-icon,
+                .field-wrap:focus-within .field-icon {
+                    color: var(--accent);
+                }
+
+        /* password toggle button */
+        .field-toggle {
+            position: absolute;
+            right: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--muted);
+            display: flex;
+            align-items: center;
+            padding: 4px;
+            transition: color 0.2s;
+        }
+
+            .field-toggle:hover {
+                color: var(--accent);
+            }
+
+            .field-toggle svg {
+                width: 17px;
+                height: 17px;
+            }
+
+        .field-input.has-toggle {
+            padding-right: 44px;
+        }
+
+        .validation-msg {
+            font-size: 0.78rem;
+            color: var(--error);
+            margin-top: 6px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* Remember / Forgot row */
+        .options-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 28px;
+        }
+
+
+        .forgot-link {
+            font-size: 13px;
+            color: #E9C46A; /* matches your gold/amber accent colour */
+            text-decoration: none;
+            opacity: 0.85;
+            transition: opacity .15s;
+        }
+
+            .forgot-link:hover {
+                opacity: 1;
+                text-decoration: underline;
+                color: #E9C46A;
+            }
+
+        .remember-label {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            color: var(--muted);
+            user-select: none;
+        }
+
+        .remember-check {
+            width: 17px;
+            height: 17px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        /* Submit button */
+        .btn-login {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-lt) 100%);
+            border: none;
+            border-radius: 10px;
+            font-family: 'Sora', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #1a0e00;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+            position: relative;
+            overflow: hidden;
+            letter-spacing: 0.01em;
+        }
+
+            .btn-login::after {
+                content: '';
+                position: absolute;
+                inset: 0;
+                background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+                opacity: 0;
+                transition: opacity 0.2s;
+            }
+
+            .btn-login:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 10px 32px rgba(232,160,32,0.4);
+            }
+
+                .btn-login:hover::after {
+                    opacity: 1;
+                }
+
+            .btn-login:active {
+                transform: translateY(0);
+            }
+
+            .btn-login:disabled {
+                opacity: 0.65;
+                cursor: not-allowed;
+                transform: none;
+            }
+
+            .btn-login .spinner {
+                display: none;
+                width: 18px;
+                height: 18px;
+                border: 2px solid rgba(26,14,0,0.3);
+                border-top-color: #1a0e00;
+                border-radius: 50%;
+                animation: spin 0.7s linear infinite;
+                margin: 0 auto;
+            }
+
+        @@keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .btn-login.loading .btn-text {
+            display: none;
+        }
+
+        .btn-login.loading .spinner {
+            display: block;
+        }
+
+        /* Footer */
+        .form-footer {
+            margin-top: 36px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--muted);
+        }
+
+            .form-footer a {
+                color: var(--muted);
+                text-decoration: none;
+            }
+
+        /* ── RESPONSIVE ────────────────────────── */
+        @@media (max-width: 900px) {
+            .panel-left {
+                display: none;
+            }
+
+            .panel-right {
+                flex: 1;
+                padding: 32px 24px;
+                background: var(--navy);
+            }
+        }
+
+        @@media (max-width: 480px) {
+            .panel-right {
+                padding: 24px 20px;
+            }
+
+            .form-title {
+                font-size: 1.7rem;
+            }
+        }
+
+        /* Entry animation */
+        .form-card {
+            animation: slide-up 0.5s cubic-bezier(0.22,1,0.36,1) both;
+        }
+
+        @@keyframes slide-up {
+            from {
+                opacity: 0;
+                transform: translateY(24px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .panel-left .illustration-wrap {
+            animation: slide-in-left 0.6s cubic-bezier(0.22,1,0.36,1) both;
+            animation-delay: 0.1s;
+        }
+
+        @@keyframes slide-in-left {
+            from {
+                opacity: 0;
+                transform: translateX(-24px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-wrapper">
+
+        <!-- ══ LEFT PANEL ════════════════════════════════ -->
+        <div class="panel-left">
+            <div class="grid-lines"></div>
+            <div class="orb orb-1"></div>
+            <div class="orb orb-2"></div>
+            <div class="orb orb-3"></div>
+
+            <div class="illustration-wrap">
+
+                <!-- Logistics / delivery SVG illustration -->
+                <svg class="illustration-svg" viewBox="0 0 400 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Ground shadow -->
+                    <ellipse cx="200" cy="300" rx="140" ry="12" fill="rgba(0,0,0,0.3)" />
+                    <!-- Road -->
+                    <rect x="30" y="258" width="340" height="28" rx="6" fill="#1a2f50" />
+                    <rect x="80" y="269" width="30" height="6" rx="3" fill="#e8a020" opacity="0.6" />
+                    <rect x="185" y="269" width="30" height="6" rx="3" fill="#e8a020" opacity="0.6" />
+                    <rect x="290" y="269" width="30" height="6" rx="3" fill="#e8a020" opacity="0.6" />
+
+                    <!-- Truck body -->
+                    <rect x="80" y="185" width="175" height="75" rx="8" fill="#1a3a6b" />
+                    <rect x="80" y="185" width="175" height="75" rx="8" stroke="#2a5299" stroke-width="1.5" />
+                    <!-- Truck cab -->
+                    <path d="M255 220 L255 185 L295 185 L315 210 L315 260 L255 260 Z" fill="#22487a" />
+                    <path d="M255 220 L255 185 L295 185 L315 210 L315 260 L255 260 Z" stroke="#2a5299" stroke-width="1.5" />
+                    <!-- Cab window -->
+                    <path d="M261 195 L261 216 L309 216 L309 212 L293 192 Z" fill="#4a9edd" opacity="0.6" />
+                    <path d="M261 195 L261 216 L309 216 L309 212 L293 192 Z" stroke="#5eb8ff" stroke-width="1" opacity="0.4" />
+                    <!-- Headlight -->
+                    <rect x="310" y="228" width="10" height="8" rx="2" fill="#ffe566" />
+                    <rect x="310" y="228" width="10" height="8" rx="2" fill="url(#hlight)" opacity="0.7" />
+                    <!-- Cargo door detail -->
+                    <line x1="168" y1="185" x2="168" y2="260" stroke="#2a5299" stroke-width="1.5" />
+                    <rect x="86" y="195" width="76" height="60" rx="4" fill="#1e3f6b" stroke="#2a5299" stroke-width="1" />
+                    <rect x="168" y="195" width="80" height="60" rx="4" fill="#1e3f6b" stroke="#2a5299" stroke-width="1" />
+                    <!-- PTC Logo on cargo -->
+                    <text x="105" y="232" font-family="Sora, sans-serif" font-size="11" font-weight="700" fill="#e8a020" opacity="0.9">PTC</text>
+                    <text x="183" y="232" font-family="Sora, sans-serif" font-size="9" font-weight="500" fill="#7a93b4">LOGISTICS</text>
+                    <!-- Wheels -->
+                    <circle cx="130" cy="265" r="20" fill="#0d1a2e" stroke="#2a5299" stroke-width="2" />
+                    <circle cx="130" cy="265" r="11" fill="#1a2f50" stroke="#3a6aab" stroke-width="1.5" />
+                    <circle cx="130" cy="265" r="4" fill="#e8a020" />
+                    <circle cx="230" cy="265" r="20" fill="#0d1a2e" stroke="#2a5299" stroke-width="2" />
+                    <circle cx="230" cy="265" r="11" fill="#1a2f50" stroke="#3a6aab" stroke-width="1.5" />
+                    <circle cx="230" cy="265" r="4" fill="#e8a020" />
+                    <circle cx="295" cy="265" r="18" fill="#0d1a2e" stroke="#2a5299" stroke-width="2" />
+                    <circle cx="295" cy="265" r="10" fill="#1a2f50" stroke="#3a6aab" stroke-width="1.5" />
+                    <circle cx="295" cy="265" r="3.5" fill="#e8a020" />
+
+                    <!-- Packages / boxes floating -->
+                    <g opacity="0.9">
+                        <rect x="55" y="128" width="48" height="44" rx="6" fill="#1e3f6b" stroke="#2a5299" stroke-width="1.5" />
+                        <line x1="55" y1="150" x2="103" y2="150" stroke="#2a5299" stroke-width="1" />
+                        <line x1="79" y1="128" x2="79" y2="172" stroke="#2a5299" stroke-width="1" />
+                        <rect x="61" y="134" width="12" height="8" rx="2" fill="#e8a020" opacity="0.6" />
+                    </g>
+                    <g opacity="0.85">
+                        <rect x="290" y="108" width="52" height="48" rx="6" fill="#1e3f6b" stroke="#2a5299" stroke-width="1.5" />
+                        <line x1="290" y1="132" x2="342" y2="132" stroke="#2a5299" stroke-width="1" />
+                        <line x1="316" y1="108" x2="316" y2="156" stroke="#2a5299" stroke-width="1" />
+                        <rect x="296" y="114" width="14" height="9" rx="2" fill="#e8a020" opacity="0.6" />
+                    </g>
+                    <g opacity="0.7">
+                        <rect x="160" y="88" width="44" height="40" rx="5" fill="#1e3f6b" stroke="#2a5299" stroke-width="1.5" />
+                        <line x1="160" y1="108" x2="204" y2="108" stroke="#2a5299" stroke-width="1" />
+                        <line x1="182" y1="88" x2="182" y2="128" stroke="#2a5299" stroke-width="1" />
+                        <rect x="166" y="93" width="10" height="7" rx="2" fill="#e8a020" opacity="0.5" />
+                    </g>
+
+                    <!-- Route dots -->
+                    <circle cx="79" cy="130" r="5" fill="#e8a020" opacity="0.9" />
+                    <circle cx="182" cy="90" r="5" fill="#e8a020" opacity="0.7" />
+                    <circle cx="316" cy="110" r="5" fill="#e8a020" opacity="0.85" />
+                    <!-- Connecting dashed route line -->
+                    <path d="M79 124 Q130 60 182 84 Q240 108 316 104" stroke="#e8a020" stroke-width="1.5" stroke-dasharray="5 4" fill="none" opacity="0.4" />
+
+                    <!-- GPS pin -->
+                    <g transform="translate(310, 64)">
+                        <circle cx="6" cy="6" r="14" fill="#e8a020" opacity="0.15" />
+                        <path d="M6 0 C2.7 0 0 2.7 0 6 C0 10.5 6 18 6 18 C6 18 12 10.5 12 6 C12 2.7 9.3 0 6 0Z" fill="#e8a020" />
+                        <circle cx="6" cy="6" r="2.5" fill="#1a0e00" />
+                    </g>
+
+                    <!-- Stars / sparkles -->
+                    <circle cx="48" cy="80" r="2" fill="#e8a020" opacity="0.5" />
+                    <circle cx="350" cy="170" r="2" fill="#e8a020" opacity="0.4" />
+                    <circle cx="200" cy="52" r="1.5" fill="#ffffff" opacity="0.3" />
+                    <circle cx="340" cy="80" r="1.5" fill="#ffffff" opacity="0.25" />
+
+                    <defs>
+                        <radialGradient id="hlight" cx="50%" cy="50%" r="50%">
+                            <stop offset="0%" stop-color="#ffe566" />
+                            <stop offset="100%" stop-color="transparent" />
+                        </radialGradient>
+                    </defs>
+                </svg>
+
+                <div class="brand-block">
+                    <div class="brand-logo">
+                        <div class="brand-icon">
+                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z" />
+                            </svg>
+                        </div>
+                        <span class="brand-name">PTC IGH System</span>
+                    </div>
+                    <p class="brand-tagline">
+                        Inter Gateway Haulage &amp;<br>Delivery Management Platform
+                    </p>
+
+                    <div class="stats-row">
+                        <div class="stat-item">
+                            <span class="stat-num">99.9%</span>
+                            <span class="stat-label">Network Uptime</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-num">99.5%</span>
+                            <span class="stat-label">Server Uptime</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-num">8/5</span>
+                            <span class="stat-label">Support</span>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ RIGHT PANEL — FORM ════════════════════════ -->
+        <div class="panel-right">
+            <div class="form-card">
+
+                <div class="form-header">
+                    <div class="form-eyebrow">
+                        <span class="eyebrow-line"></span>
+                        <img src="@Url.Content("~/images/ssl.png")" alt="SSL Secure" class="ssl-icon" />
+
+                        Secure Portal
+                    </div>
+                    <h1 class="form-title">Welcome <span>Back</span></h1>
+                    <p class="form-subtitle">Sign in to access the IGH management system.</p>
+                </div>
+
+
+                <!-- Error Alert -->
+                @if (TempData["ErrorMessage"] != null)
+                {
+                    <div class="alert-error">
+                        <span class="alert-error-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+                            </svg>
+                        </span>
+                        <span class="alert-error-text">@TempData["ErrorMessage"]</span>
+                    </div>
+                }
+
+                @using (Html.BeginForm("Login", "Account", new { ReturnUrl = ViewBag.ReturnUrl },
+                                FormMethod.Post, null, new { id = "loginForm", autocomplete = "off" }))
+                {
+                    @Html.AntiForgeryToken()
+
+                    <!-- Username -->
+                    <div class="field-group">
+                        <label class="field-label" for="UserName">Username</label>
+                        <div class="field-wrap">
+                            @Html.TextBoxFor(m => m.UserName, new
+                            {
+                                id = "UserName",
+                                                @class = "field-input",
+                                                placeholder = "Enter your username",
+                                                autocomplete = "username",
+                                                spellcheck = "false"
+                                                })
+                        <span class="field-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
+                            </svg>
+                        </span>
+                    </div>
+                    @if (ViewData.ModelState["UserName"]?.Errors.Count > 0)
+                        {
+                            <div class="validation-msg">@Html.ValidationMessageFor(m => m.UserName)</div>
+                        }
+                    </div>
+
+                    <!-- Password -->
+                    <div class="field-group">
+                        <label class="field-label" for="Password">Password</label>
+                        <div class="field-wrap">
+                            @Html.PasswordFor(m => m.Password, new
+                            {
+                                id = "Password",
+                                                @class = "field-input has-toggle",
+                                                placeholder = "Enter your password",
+                                                autocomplete = "current-password"
+                                                })
+                        <span class="field-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v2z" />
+                            </svg>
+                        </span>
+                        <button type="button" class="field-toggle" id="togglePwd" title="Show/hide password">
+                            <svg id="eyeIcon" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
+                            </svg>
+                        </button>
+                    </div>
+                    @if (ViewData.ModelState["Password"]?.Errors.Count > 0)
+                        {
+                            <div class="validation-msg">@Html.ValidationMessageFor(m => m.Password)</div>
+                        }
+                    </div>
+
+                    <!-- Options row -->
+                    <div class="options-row">
+                        <label class="remember-label">
+                            @Html.CheckBoxFor(m => m.RememberMe, new { @class = "remember-check" })
+                            Remember me for 8 hours
+                        </label>
+
+                        <!-- Forgot password link -->
+                        <a href="javascript:void(0)" class="forgot-link" onclick="showForgotPassword()">
+                            Forgot password?
+                        </a>
+                    </div>
+
+                    <!-- Submit -->
+                    <button type="submit" class="btn-login" id="loginBtn">
+                        <span class="btn-text">Sign In</span>
+                        <span class="spinner"></span>
+                    </button>
+                }
+
+                <div class="form-footer">
+                    <p>Having trouble? Contact your system administrator.</p>
+                    <p style="margin-top:8px;">
+                        &copy; @DateTime.Now.Year PTC Logistics &mdash; IGH System v2.0
+                    </p>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+
+        function showForgotPassword() {
+
+            Swal.fire({
+            icon: 'info',
+            title: 'Forgot Your Password?',
+            html: 'Please contact the <strong>EDP Department</strong> or log in to the UTMS System to reset your password.',
+            confirmButtonText: 'OK',
+            confirmButtonColor: '#e8a020'
+            });
+
+        }
+        // Password toggle
+        const toggleBtn = document.getElementById('togglePwd');
+        const pwdInput  = document.getElementById('Password');
+        const eyeIcon   = document.getElementById('eyeIcon');
+        const eyeOffSVG = `<path d="..."/>`; // shortened for clarity
+
+        toggleBtn.addEventListener('click', () => {
+            const isHidden = pwdInput.type === 'password';
+            pwdInput.type = isHidden ? 'text' : 'password';
+            eyeIcon.innerHTML = isHidden ? eyeOffSVG : `<path d="..."/>`;
+        });
+
+        const loginForm = document.getElementById('loginForm');
+        const loginBtn  = document.getElementById('loginBtn');
+
+        loginForm.addEventListener('submit', function (e) {
+            const user = document.getElementById('UserName').value.trim();
+            const pass = document.getElementById('Password').value.trim();
+            if (user && pass) {
+                loginBtn.classList.add('loading');
+                loginBtn.disabled = true;
+            }
+        });
+
+           
+    </script>
+
+
+
+</body>
+</html>
