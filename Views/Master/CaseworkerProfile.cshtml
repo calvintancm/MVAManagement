@@ -1,0 +1,305 @@
+@{
+    ViewData["Title"] = "Caseworker Profiles";
+    ViewData["BreadcrumbSection"] = "Master Data";
+    ViewData["BreadcrumbPage"] = "Caseworker Profiles";
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Caseworker Profiles</h1>
+        <p class="page-subtitle">Manage solicitors and caseworkers assigned to MVA case files</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-ptc-primary" onclick="openAddRow()">
+            <i class="bi bi-plus-lg"></i> Add Caseworker
+        </button>
+        <button class="btn-ptc-outline" onclick="exportGrid()">
+            <i class="bi bi-download"></i> Export
+        </button>
+    </div>
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-body" style="padding:16px 20px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;">
+
+            <div style="display:flex;flex-direction:column;gap:5px;flex:2;min-width:200px;">
+                <label class="filter-label">Name / Email</label>
+                <input type="text" id="queryName" class="k-textbox"
+                       style="width:100%;max-width:280px;" placeholder="Search name or email..." />
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:160px;">
+                <label class="filter-label">Job Role</label>
+                <select id="queryJobRole" style="width:160px;"></select>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:130px;">
+                <label class="filter-label">Active</label>
+                <select id="queryIsActive" style="width:130px;"></select>
+            </div>
+
+            <div style="display:flex;gap:8px;padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="refreshGrid()">
+                    <i class="bi bi-search"></i> Search
+                </button>
+                <button class="btn-ptc-outline" onclick="clearFilters()">
+                    <i class="bi bi-x-circle"></i> Clear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Grid Card *@
+<div class="ptc-card">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title">
+            <i class="bi bi-person-badge"></i> Caseworker Profiles
+        </h2>
+        <span id="recordCount" class="record-count-badge">0 records</span>
+    </div>
+    <div class="ptc-card-body" style="padding:0;">
+        <div id="main_grid"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+var jobRoles = [
+    { text: 'Solicitor',          value: 'Solicitor' },
+    { text: 'Senior Solicitor',   value: 'Senior Solicitor' },
+    { text: 'Legal Executive',    value: 'Legal Executive' },
+    { text: 'Paralegal',          value: 'Paralegal' },
+    { text: 'Caseworker',         value: 'Caseworker' },
+    { text: 'Admin',              value: 'Admin' }
+];
+
+var avatarColors = [
+    { text: 'Blue',   value: 'av-blue'   },
+    { text: 'Green',  value: 'av-green'  },
+    { text: 'Amber',  value: 'av-amber'  },
+    { text: 'Rose',   value: 'av-rose'   },
+    { text: 'Violet', value: 'av-violet' },
+    { text: 'Teal',   value: 'av-teal'   }
+];
+
+// Avatar bg/text map (matches dashboard)
+var bgMap  = { 'av-blue':'#B5D4F4','av-green':'#9FE1CB','av-amber':'#FAC775','av-rose':'#F5C4B3','av-violet':'#DDD6FE','av-teal':'#A5F3FC' };
+var clrMap = { 'av-blue':'#0C447C','av-green':'#085041','av-amber':'#633806','av-rose':'#712B13','av-violet':'#5B21B6','av-teal':'#0E7490' };
+
+$(function () {
+    kendo.culture('en-GB');
+
+    $('#queryIsActive').kendoDropDownList({
+        dataTextField: 'text', dataValueField: 'value',
+        dataSource: [{ text: 'All', value: '' }, { text: 'Active', value: 'true' }, { text: 'Inactive', value: 'false' }],
+        value: ''
+    });
+
+    $('#queryJobRole').kendoDropDownList({
+        dataTextField: 'text', dataValueField: 'value',
+        dataSource: jobRoles,
+        optionLabel: 'All Roles', value: ''
+    });
+
+    $('#queryName').on('keypress', function (e) { if (e.which === 13) refreshGrid(); });
+
+    var isMobile = window.innerWidth <= 576;
+
+    $('#main_grid').kendoGrid({
+        dataSource: {
+            transport: {
+                read:    { url: '@Url.Action("CaseworkerRead",    "Master")', type: 'POST' },
+                update:  { url: '@Url.Action("CaseworkerUpdate",  "Master")', type: 'POST' },
+                create:  { url: '@Url.Action("CaseworkerCreate",  "Master")', type: 'POST' },
+                destroy: { url: '@Url.Action("CaseworkerDestroy", "Master")', type: 'POST' },
+                parameterMap: function (data, operation) {
+                    var token = $('input[name="__RequestVerificationToken"]').val();
+                    if (operation === 'read') return $.extend({}, data, getFilters(), { __RequestVerificationToken: token });
+                    return $.extend({}, data, { __RequestVerificationToken: token });
+                }
+            },
+            schema: {
+                data: 'Data', total: 'Total', errors: 'Errors',
+                model: {
+                    id: 'Id',
+                    fields: {
+                        Id:           { type: 'number',  editable: false },
+                        FullName:     { type: 'string',  validation: { required: true } },
+                        JobRole:      { type: 'string',  validation: { required: true } },
+                        Email:        { type: 'string' },
+                        PhoneNumber:  { type: 'string' },
+                        BarNumber:    { type: 'string' },
+                        AvatarClass:  { type: 'string' },
+                        MaxCaseLoad:  { type: 'number',  validation: { min: 1 } },
+                        IsActive:     { type: 'boolean' },
+                        CreatedAt:    { type: 'date', editable: false },
+                        UpdatedAt:    { type: 'date', editable: false }
+                    }
+                }
+            },
+            pageSize: 15, serverPaging: true, serverSorting: true,
+            sort: { field: 'FullName', dir: 'asc' },
+            requestEnd: function (e) {
+                if (e.type === 'read' && e.response) {
+                    var t = e.response.Total || 0;
+                    $('#recordCount').text(t + ' record' + (t !== 1 ? 's' : ''));
+                }
+            },
+            error: function (e) { handleGridError(e); }
+        },
+
+        columns: [
+            { field: 'Id', hidden: true },
+            {
+                // Avatar + Name combined display column
+                field: 'FullName', title: 'Caseworker', width: 220,
+                template: function (d) {
+                    var av  = d.AvatarClass || 'av-blue';
+                    var bg  = bgMap[av]  || '#B5D4F4';
+                    var clr = clrMap[av] || '#0C447C';
+                    var initials = d.FullName
+                        ? d.FullName.trim().split(' ').filter(Boolean)
+                            .map(function (p, i, a) { return (i === 0 || i === a.length - 1) ? p[0] : null; })
+                            .filter(Boolean).join('').toUpperCase().substring(0, 2)
+                        : '??';
+                    return '<div style="display:flex;align-items:center;gap:9px;">'
+                         + '<div style="width:30px;height:30px;border-radius:50%;background:' + bg + ';color:' + clr + ';'
+                         + 'display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">'
+                         + initials + '</div>'
+                         + '<div><div style="font-weight:600;font-size:0.88rem;">' + kendo.htmlEncode(d.FullName || '') + '</div>'
+                         + '<div style="font-size:0.75rem;color:#64748b;">' + kendo.htmlEncode(d.BarNumber || '') + '</div></div></div>';
+                }
+            },
+            {
+                field: 'JobRole', title: 'Job Role', width: 150,
+                template: function (d) {
+                    var roleColors = {
+                        'Solicitor':        '#dbeafe', 'Senior Solicitor': '#e0e7ff',
+                        'Legal Executive':  '#dcfce7', 'Paralegal':        '#fef3c7',
+                        'Caseworker':       '#f3e8ff', 'Admin':            '#f1f5f9'
+                    };
+                    var bg = roleColors[d.JobRole] || '#f1f5f9';
+                    return '<span style="background:' + bg + ';padding:2px 10px;border-radius:20px;font-size:0.75rem;font-weight:600;">'
+                         + kendo.htmlEncode(d.JobRole || '') + '</span>';
+                },
+                editor: function (container, options) {
+                    $('<input name="' + options.field + '"/>').appendTo(container).kendoDropDownList({
+                        dataTextField: 'text', dataValueField: 'value',
+                        dataSource: jobRoles, value: options.model.JobRole
+                    });
+                }
+            },
+            {
+                field: 'Email', title: 'Email', width: 200, hidden: isMobile,
+                template: function (d) {
+                    if (!d.Email) return '-';
+                    return '<a href="mailto:' + kendo.htmlEncode(d.Email) + '" style="color:#1d6fa4;font-size:0.85rem;">'
+                         + kendo.htmlEncode(d.Email) + '</a>';
+                }
+            },
+            {
+                field: 'PhoneNumber', title: 'Phone', width: 130, hidden: isMobile,
+                template: '#= PhoneNumber || "-" #'
+            },
+            {
+                field: 'BarNumber', title: 'Bar No.', width: 110, hidden: isMobile,
+                template: '#= BarNumber || "-" #'
+            },
+            {
+                field: 'AvatarClass', title: 'Avatar', width: 100,
+                template: function (d) {
+                    var av  = d.AvatarClass || 'av-blue';
+                    var bg  = bgMap[av]  || '#B5D4F4';
+                    var clr = clrMap[av] || '#0C447C';
+                    return '<span style="background:' + bg + ';color:' + clr + ';padding:2px 10px;border-radius:20px;font-size:0.75rem;font-weight:600;">'
+                         + kendo.htmlEncode(av) + '</span>';
+                },
+                editor: function (container, options) {
+                    $('<input name="' + options.field + '"/>').appendTo(container).kendoDropDownList({
+                        dataTextField: 'text', dataValueField: 'value',
+                        dataSource: avatarColors, value: options.model.AvatarClass || 'av-blue'
+                    });
+                }
+            },
+            {
+                field: 'MaxCaseLoad', title: 'Max Cases', width: 100,
+                attributes: { style: 'text-align:center;' },
+                template: '#= MaxCaseLoad || "-" #'
+            },
+            {
+                field: 'IsActive', title: 'Active', width: 80,
+                attributes: { style: 'text-align:center;' },
+                template: '# if(IsActive){ #<span class="badge-active">Active</span># }else{ #<span class="badge-inactive">Inactive</span># } #'
+            },
+            {
+                field: 'UpdatedAt', title: 'Updated', width: 140, hidden: isMobile,
+                template: '#= UpdatedAt ? kendo.toString(kendo.parseDate(UpdatedAt), "dd/MM/yyyy HH:mm") : "-" #'
+            },
+            {
+                command: [
+                    { name: 'edit', text: { edit: ' Edit', update: ' Save', cancel: ' Cancel' } },
+                    {
+                        name: 'destroy', text: ' Delete',
+                        click: function (e) {
+                            e.preventDefault();
+                            var grid  = $('#main_grid').data('kendoGrid');
+                            var model = grid.dataItem($(e.target).closest('tr'));
+                            KSwal.confirmDelete('Delete Caseworker?',
+                                'Delete <strong>' + model.FullName + '</strong>? Cases assigned to this caseworker will become unassigned.',
+                                function () { grid.dataSource.remove(model); grid.dataSource.sync(); }
+                            );
+                        }
+                    }
+                ],
+                title: 'Action', width: 200
+            }
+        ],
+
+        editable: 'inline',
+        pageable: { pageSize: 15, pageSizes: [15, 30, 50], buttonCount: 5 },
+        sortable: true, scrollable: true, height: 540,
+        dataBound: function () {
+            this.thead.find('th').css({ background: '#f8fafc', 'font-weight': '600', 'font-size': '0.77rem', color: '#475569', 'border-color': '#e2e8f0' });
+        },
+        save: function () { KSwal.toast('success', 'Caseworker profile saved.'); }
+    });
+
+    $('#queryIsActive').data('kendoDropDownList').bind('change', refreshGrid);
+    $('#queryJobRole').data('kendoDropDownList').bind('change', refreshGrid);
+    refreshGrid();
+});
+
+function getFilters() {
+    var ddlActive = $('#queryIsActive').data('kendoDropDownList');
+    var ddlRole   = $('#queryJobRole').data('kendoDropDownList');
+    return {
+        name:     $('#queryName').val().trim(),
+        jobRole:  ddlRole   ? ddlRole.value()   : '',
+        isActive: ddlActive ? ddlActive.value() : ''
+    };
+}
+function refreshGrid() {
+    var g = $('#main_grid').data('kendoGrid');
+    if (g) g.dataSource.query({ page: 1, pageSize: g.dataSource.pageSize(), sort: g.dataSource.sort() });
+}
+function clearFilters() {
+    $('#queryName').val('');
+    var da = $('#queryIsActive').data('kendoDropDownList'); if (da) da.value('');
+    var dr = $('#queryJobRole').data('kendoDropDownList');  if (dr) dr.value('');
+    refreshGrid();
+}
+function openAddRow() { var g = $('#main_grid').data('kendoGrid'); if (g) g.addRow(); }
+function exportGrid()  { var g = $('#main_grid').data('kendoGrid'); if (g) { g.saveAsExcel(); KSwal.toast('info', 'Exporting...'); } }
+function handleGridError(e) {
+    var msg = 'An error occurred.';
+    if (e.errors) { var p = []; $.each(e.errors, function (k, v) { if (v.errors) p.push(v.errors.join('\n')); else if (typeof v === 'string') p.push(v); }); if (p.length) msg = p.join('\n'); }
+    else if (e.xhr) { if (e.xhr.status === 401) msg = 'Session expired.'; else if (e.xhr.status === 403) msg = 'Access denied.'; else if (e.xhr.status === 500) msg = 'Server error.'; }
+    KSwal.error('Grid Error', msg);
+}
+</script>
+}

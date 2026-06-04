@@ -1,0 +1,223 @@
+@{
+    ViewData["Title"] = "Disbursement Categories";
+    ViewData["BreadcrumbSection"] = "Master Data";
+    ViewData["BreadcrumbPage"] = "Disbursement Categories";
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Disbursement Categories</h1>
+        <p class="page-subtitle">Manage expense categories used in case disbursement records</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-ptc-primary" onclick="openAddRow()">
+            <i class="bi bi-plus-lg"></i> Add Category
+        </button>
+        <button class="btn-ptc-outline" onclick="exportGrid()">
+            <i class="bi bi-download"></i> Export
+        </button>
+    </div>
+</div>
+
+@* Info Banner *@
+<div class="ptc-card mb-3" style="border-left:4px solid #1d6fa4;">
+    <div class="ptc-card-body" style="padding:14px 20px;">
+        <div style="display:flex;align-items:flex-start;gap:12px;">
+            <i class="bi bi-info-circle-fill" style="color:#1d6fa4;font-size:18px;margin-top:2px;flex-shrink:0;"></i>
+            <div style="font-size:0.8rem;color:var(--text-muted);line-height:1.6;">
+                Categories defined here appear as options when recording disbursements against a case file.
+                <strong>HexColor</strong> is used in the dashboard disbursement chart (e.g. #185FA5).
+                <strong>DisplayOrder</strong> controls sort order in dropdowns and reports.
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-body" style="padding:16px 20px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;">
+            <div style="display:flex;flex-direction:column;gap:5px;flex:2;min-width:200px;">
+                <label class="filter-label">Category Name</label>
+                <input type="text" id="queryCategoryName" class="k-textbox"
+                       style="width:100%;max-width:280px;" placeholder="Search category..." />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:130px;">
+                <label class="filter-label">Active</label>
+                <select id="queryIsActive" style="width:130px;"></select>
+            </div>
+            <div style="display:flex;gap:8px;padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="refreshGrid()">
+                    <i class="bi bi-search"></i> Search
+                </button>
+                <button class="btn-ptc-outline" onclick="clearFilters()">
+                    <i class="bi bi-x-circle"></i> Clear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Grid Card *@
+<div class="ptc-card">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title">
+            <i class="bi bi-list-check"></i> Disbursement Categories
+        </h2>
+        <span id="recordCount" class="record-count-badge">0 records</span>
+    </div>
+    <div class="ptc-card-body" style="padding:0;">
+        <div id="main_grid"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+$(function () {
+    kendo.culture('en-GB');
+
+    $('#queryIsActive').kendoDropDownList({
+        dataTextField: 'text', dataValueField: 'value',
+        dataSource: [{ text: 'All', value: '' }, { text: 'Active', value: 'true' }, { text: 'Inactive', value: 'false' }],
+        value: ''
+    });
+
+    $('#queryCategoryName').on('keypress', function (e) { if (e.which === 13) refreshGrid(); });
+
+    var isMobile = window.innerWidth <= 576;
+
+    $('#main_grid').kendoGrid({
+        dataSource: {
+            transport: {
+                read:    { url: '@Url.Action("DisbursementCategoryRead",    "Master")', type: 'POST' },
+                update:  { url: '@Url.Action("DisbursementCategoryUpdate",  "Master")', type: 'POST' },
+                create:  { url: '@Url.Action("DisbursementCategoryCreate",  "Master")', type: 'POST' },
+                destroy: { url: '@Url.Action("DisbursementCategoryDestroy", "Master")', type: 'POST' },
+                parameterMap: function (data, operation) {
+                    var token = $('input[name="__RequestVerificationToken"]').val();
+                    if (operation === 'read') return $.extend({}, data, getFilters(), { __RequestVerificationToken: token });
+                    return $.extend({}, data, { __RequestVerificationToken: token });
+                }
+            },
+            schema: {
+                data: 'Data', total: 'Total', errors: 'Errors',
+                model: {
+                    id: 'Id',
+                    fields: {
+                        Id:           { type: 'number', editable: false },
+                        CategoryName: { type: 'string', validation: { required: true } },
+                        Description:  { type: 'string' },
+                        HexColor:     { type: 'string', validation: { required: true } },
+                        DisplayOrder: { type: 'number', validation: { required: true, min: 0 } },
+                        IsActive:     { type: 'boolean' },
+                        CreatedAt:    { type: 'date', editable: false },
+                        UpdatedAt:    { type: 'date', editable: false }
+                    }
+                }
+            },
+            pageSize: 15, serverPaging: true, serverSorting: true,
+            sort: { field: 'DisplayOrder', dir: 'asc' },
+            requestEnd: function (e) {
+                if (e.type === 'read' && e.response) {
+                    var t = e.response.Total || 0;
+                    $('#recordCount').text(t + ' record' + (t !== 1 ? 's' : ''));
+                }
+            },
+            error: function (e) { handleGridError(e); }
+        },
+
+        columns: [
+            { field: 'Id', hidden: true },
+            {
+                field: 'CategoryName', title: 'Category', width: 220,
+                template: function (d) {
+                    var c = d.HexColor || '#94A3B8';
+                    return '<span style="display:inline-flex;align-items:center;gap:8px;">'
+                         + '<span style="width:10px;height:10px;border-radius:50%;background:' + c + ';flex-shrink:0;display:inline-block;"></span>'
+                         + '<span style="font-weight:600;">' + kendo.htmlEncode(d.CategoryName || '') + '</span></span>';
+                }
+            },
+            {
+                field: 'Description', title: 'Description', width: 280,
+                template: '#= Description || "-" #'
+            },
+            {
+                field: 'HexColor', title: 'Chart Color', width: 120,
+                template: function (d) {
+                    var c = d.HexColor || '#94A3B8';
+                    return '<span style="display:inline-flex;align-items:center;gap:6px;">'
+                         + '<span style="width:20px;height:20px;border-radius:5px;background:' + c + ';border:1px solid rgba(0,0,0,0.1);flex-shrink:0;"></span>'
+                         + '<code style="font-size:0.8rem;">' + kendo.htmlEncode(c) + '</code></span>';
+                }
+            },
+            {
+                field: 'DisplayOrder', title: 'Order', width: 70,
+                attributes: { style: 'text-align:center;' }
+            },
+            {
+                field: 'IsActive', title: 'Active', width: 80,
+                attributes: { style: 'text-align:center;' },
+                template: '# if(IsActive){ #<span class="badge-active">Active</span># }else{ #<span class="badge-inactive">Inactive</span># } #'
+            },
+            {
+                field: 'UpdatedAt', title: 'Updated', width: 140, hidden: isMobile,
+                template: '#= UpdatedAt ? kendo.toString(kendo.parseDate(UpdatedAt), "dd/MM/yyyy HH:mm") : "-" #'
+            },
+            {
+                command: [
+                    { name: 'edit', text: { edit: ' Edit', update: ' Save', cancel: ' Cancel' } },
+                    {
+                        name: 'destroy', text: ' Delete',
+                        click: function (e) {
+                            e.preventDefault();
+                            var grid  = $('#main_grid').data('kendoGrid');
+                            var model = grid.dataItem($(e.target).closest('tr'));
+                            KSwal.confirmDelete('Delete Category?',
+                                'Delete <strong>' + model.CategoryName + '</strong>? Disbursements using this category will lose their category reference.',
+                                function () { grid.dataSource.remove(model); grid.dataSource.sync(); }
+                            );
+                        }
+                    }
+                ],
+                title: 'Action', width: 200
+            }
+        ],
+
+        editable: 'inline',
+        pageable: { pageSize: 15, pageSizes: [15, 30, 50], buttonCount: 5 },
+        sortable: true, scrollable: true, height: 480,
+        dataBound: function () {
+            this.thead.find('th').css({ background: '#f8fafc', 'font-weight': '600', 'font-size': '0.77rem', color: '#475569', 'border-color': '#e2e8f0' });
+        },
+        save: function () { KSwal.toast('success', 'Category saved.'); }
+    });
+
+    $('#queryIsActive').data('kendoDropDownList').bind('change', refreshGrid);
+    refreshGrid();
+});
+
+function getFilters() {
+    var ddl = $('#queryIsActive').data('kendoDropDownList');
+    return { categoryName: $('#queryCategoryName').val().trim(), isActive: ddl ? ddl.value() : '' };
+}
+function refreshGrid() {
+    var g = $('#main_grid').data('kendoGrid');
+    if (g) g.dataSource.query({ page: 1, pageSize: g.dataSource.pageSize(), sort: g.dataSource.sort() });
+}
+function clearFilters() {
+    $('#queryCategoryName').val('');
+    var ddl = $('#queryIsActive').data('kendoDropDownList'); if (ddl) ddl.value('');
+    refreshGrid();
+}
+function openAddRow() { var g = $('#main_grid').data('kendoGrid'); if (g) g.addRow(); }
+function exportGrid()  { var g = $('#main_grid').data('kendoGrid'); if (g) { g.saveAsExcel(); KSwal.toast('info', 'Exporting...'); } }
+function handleGridError(e) {
+    var msg = 'An error occurred.';
+    if (e.errors) { var p = []; $.each(e.errors, function (k, v) { if (v.errors) p.push(v.errors.join('\n')); else if (typeof v === 'string') p.push(v); }); if (p.length) msg = p.join('\n'); }
+    else if (e.xhr) { if (e.xhr.status === 401) msg = 'Session expired.'; else if (e.xhr.status === 403) msg = 'Access denied.'; else if (e.xhr.status === 500) msg = 'Server error.'; }
+    KSwal.error('Grid Error', msg);
+}
+</script>
+}

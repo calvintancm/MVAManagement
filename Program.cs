@@ -77,17 +77,16 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 // ────────────────────────────────────────────────────────────────
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
 {
-    // Password rules are irrelevant — API handles auth.
-    // Setting these avoids any accidental validation errors
-    // if user records are created without passwords.
+    // Password rules are irrelevant — we verify via CheckPasswordAsync.
     options.Password.RequireDigit = false;
     options.Password.RequireLowercase = false;
     options.Password.RequireUppercase = false;
     options.Password.RequireNonAlphanumeric = false;
     options.Password.RequiredLength = 1;
 })
-.AddRoles<IdentityRole>()                       // enables RoleManager<IdentityRole>
-.AddEntityFrameworkStores<ApplicationDbContext>(); // uses your existing DbContext
+.AddRoles<IdentityRole>()                        // enables RoleManager<IdentityRole>
+.AddEntityFrameworkStores<ApplicationDbContext>() // binds to YOUR DbContext
+.AddDefaultTokenProviders();                      // needed if you ever send reset emails
 
 /*  Cookie Auth  */
 builder.Services.AddAuthentication(
