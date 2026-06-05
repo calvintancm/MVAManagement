@@ -9,7 +9,7 @@
 <div class="page-header">
     <div>
         <h1 class="page-title">Case Status Master</h1>
-        <p class="page-subtitle">Manage MVA case status codes and display settings</p>
+        <p class="page-subtitle">Manage MVA case status codes and display order</p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn-ptc-primary" onclick="openAddRow()">
@@ -27,10 +27,9 @@
         <div style="display:flex;align-items:flex-start;gap:12px;">
             <i class="bi bi-info-circle-fill" style="color:#1d6fa4;font-size:18px;margin-top:2px;flex-shrink:0;"></i>
             <div style="font-size:0.8rem;color:var(--text-muted);line-height:1.6;">
-                Status codes drive the case pipeline, dashboard donut chart, and settlement funnel.
-                <strong>StatusCode</strong> must be unique (e.g. ACT, NEG, LIT, SET, CLO).
-                <strong>DisplayOrder</strong> controls the funnel sort order.
-                <strong>HexColor</strong> accepts any CSS hex value (e.g. #185FA5).
+                Status codes drive the case pipeline and settlement funnel on the dashboard.
+                <strong>StatusCode</strong> must be unique (e.g. ACT, NEG, LIT, SET, CLO, WIT).
+                <strong>DisplayOrder</strong> controls sort order in dropdowns and the funnel chart.
             </div>
         </div>
     </div>
@@ -44,10 +43,6 @@
                 <label class="filter-label">Status Name / Code</label>
                 <input type="text" id="queryStatusName" class="k-textbox"
                        style="width:100%;max-width:280px;" placeholder="Search..." />
-            </div>
-            <div style="display:flex;flex-direction:column;gap:5px;min-width:130px;">
-                <label class="filter-label">Active</label>
-                <select id="queryIsActive" style="width:130px;"></select>
             </div>
             <div style="display:flex;gap:8px;padding-bottom:1px;">
                 <button class="btn-ptc-primary" onclick="refreshGrid()">
@@ -79,16 +74,6 @@
 $(function () {
     kendo.culture('en-GB');
 
-    $('#queryIsActive').kendoDropDownList({
-        dataTextField: 'text', dataValueField: 'value',
-        dataSource: [
-            { text: 'All', value: '' },
-            { text: 'Active', value: 'true' },
-            { text: 'Inactive', value: 'false' }
-        ],
-        value: ''
-    });
-
     $('#queryStatusName').on('keypress', function (e) {
         if (e.which === 13) refreshGrid();
     });
@@ -104,9 +89,8 @@ $(function () {
                 destroy: { url: '@Url.Action("CaseStatusDestroy", "Master")', type: 'POST' },
                 parameterMap: function (data, operation) {
                     var token = $('input[name="__RequestVerificationToken"]').val();
-                    if (operation === 'read') {
+                    if (operation === 'read')
                         return $.extend({}, data, getFilters(), { __RequestVerificationToken: token });
-                    }
                     return $.extend({}, data, { __RequestVerificationToken: token });
                 }
             },
@@ -115,15 +99,10 @@ $(function () {
                 model: {
                     id: 'Id',
                     fields: {
-                        Id:           { type: 'number',  editable: false },
-                        StatusCode:   { type: 'string',  validation: { required: true, maxlength: 10 } },
-                        StatusName:   { type: 'string',  validation: { required: true } },
-                        Description:  { type: 'string'  },
-                        HexColor:     { type: 'string',  validation: { required: true } },
-                        DisplayOrder: { type: 'number',  validation: { required: true, min: 0 } },
-                        IsActive:     { type: 'boolean' },
-                        CreatedAt:    { type: 'date',    editable: false },
-                        UpdatedAt:    { type: 'date',    editable: false }
+                        Id:           { type: 'number', editable: false },
+                        StatusName:   { type: 'string', validation: { required: true } },
+                        StatusCode:   { type: 'string', validation: { maxlength: 10 } },
+                        DisplayOrder: { type: 'number', validation: { required: true, min: 0 } }
                     }
                 }
             },
@@ -141,42 +120,24 @@ $(function () {
         columns: [
             { field: 'Id', hidden: true },
             {
-                field: 'StatusCode', title: 'Code', width: 90,
-                template: '<span style="font-family:monospace;font-weight:700;font-size:0.82rem;">#: StatusCode #</span>'
-            },
-            {
-                field: 'StatusName', title: 'Status Name', width: 160,
+                field: 'StatusCode', title: 'Code', width: 100,
                 template: function (d) {
-                    return '<span style="display:inline-flex;align-items:center;gap:7px;">'
-                         + '<span style="width:10px;height:10px;border-radius:50%;background:' + (d.HexColor || '#94A3B8') + ';flex-shrink:0;display:inline-block;"></span>'
-                         + '<span style="font-weight:600;">' + kendo.htmlEncode(d.StatusName) + '</span></span>';
+                    if (!d.StatusCode) return '<span style="color:#94a3b8;">—</span>';
+                    return '<span style="font-family:monospace;font-weight:700;font-size:0.85rem;'
+                         + 'background:#e0e7ff;color:#3730a3;padding:2px 10px;border-radius:20px;">'
+                         + kendo.htmlEncode(d.StatusCode) + '</span>';
                 }
             },
             {
-                field: 'Description', title: 'Description', width: 220,
-                template: '#= Description || "" #'
+                field: 'StatusName', title: 'Status Name', width: 220,
+                template: '<span style="font-weight:600;">#: StatusName #</span>'
             },
             {
-                field: 'HexColor', title: 'Hex Color', width: 110,
-                template: function (d) {
-                    var c = d.HexColor || '#94A3B8';
-                    return '<span style="display:inline-flex;align-items:center;gap:6px;">'
-                         + '<span style="width:18px;height:18px;border-radius:4px;background:' + c + ';border:1px solid rgba(0,0,0,0.1);flex-shrink:0;"></span>'
-                         + '<code style="font-size:0.8rem;">' + kendo.htmlEncode(c) + '</code></span>';
-                }
-            },
-            {
-                field: 'DisplayOrder', title: 'Order', width: 70,
-                attributes: { style: 'text-align:center;' }
-            },
-            {
-                field: 'IsActive', title: 'Active', width: 80,
+                field: 'DisplayOrder', title: 'Display Order', width: 120,
                 attributes: { style: 'text-align:center;' },
-                template: '# if(IsActive){ #<span class="badge-active">Active</span># }else{ #<span class="badge-inactive">Inactive</span># } #'
-            },
-            {
-                field: 'UpdatedAt', title: 'Updated', width: 140, hidden: isMobile,
-                template: '#= UpdatedAt ? kendo.toString(kendo.parseDate(UpdatedAt), "dd/MM/yyyy HH:mm") : "-" #'
+                template: '<span style="display:inline-block;background:#dbeafe;color:#1d4ed8;'
+                        + 'padding:2px 12px;border-radius:20px;font-size:0.75rem;font-weight:700;">'
+                        + '#: DisplayOrder #</span>'
             },
             {
                 command: [
@@ -185,12 +146,12 @@ $(function () {
                         name: 'destroy', text: ' Delete',
                         click: function (e) {
                             e.preventDefault();
-                            var row   = $(e.target).closest('tr');
                             var grid  = $('#main_grid').data('kendoGrid');
-                            var model = grid.dataItem(row);
+                            var model = grid.dataItem($(e.target).closest('tr'));
                             KSwal.confirmDelete(
                                 'Delete Status?',
-                                'Delete <strong>' + model.StatusName + ' (' + model.StatusCode + ')</strong>? Cases using this status may be affected.',
+                                'Delete <strong>' + model.StatusName + ' (' + (model.StatusCode || '') + ')</strong>?'
+                                + ' Cases using this status may be affected.',
                                 function () { grid.dataSource.remove(model); grid.dataSource.sync(); }
                             );
                         }
@@ -202,8 +163,7 @@ $(function () {
 
         editable: 'inline',
         pageable: { pageSize: 15, pageSizes: [15, 30, 50], buttonCount: 5 },
-        sortable: true, scrollable: true, height: 520,
-
+        sortable: true, scrollable: true, height: 480,
         dataBound: function () {
             this.thead.find('th').css({
                 background: '#f8fafc', 'font-weight': '600',
@@ -213,13 +173,11 @@ $(function () {
         save: function () { KSwal.toast('success', 'Case status saved.'); }
     });
 
-    $('#queryIsActive').data('kendoDropDownList').bind('change', refreshGrid);
     refreshGrid();
 });
 
 function getFilters() {
-    var ddl = $('#queryIsActive').data('kendoDropDownList');
-    return { statusName: $('#queryStatusName').val().trim(), isActive: ddl ? ddl.value() : '' };
+    return { statusName: $('#queryStatusName').val().trim() };
 }
 function refreshGrid() {
     var g = $('#main_grid').data('kendoGrid');
@@ -227,27 +185,19 @@ function refreshGrid() {
 }
 function clearFilters() {
     $('#queryStatusName').val('');
-    var ddl = $('#queryIsActive').data('kendoDropDownList');
-    if (ddl) ddl.value('');
     refreshGrid();
 }
-function openAddRow() {
-    var g = $('#main_grid').data('kendoGrid');
-    if (g) g.addRow();
-}
-function exportGrid() {
-    var g = $('#main_grid').data('kendoGrid');
-    if (g) { g.saveAsExcel(); KSwal.toast('info', 'Exporting...'); }
-}
+function openAddRow() { var g = $('#main_grid').data('kendoGrid'); if (g) g.addRow(); }
+function exportGrid() { var g = $('#main_grid').data('kendoGrid'); if (g) { g.saveAsExcel(); KSwal.toast('info', 'Exporting...'); } }
 function handleGridError(e) {
     var msg = 'An error occurred.';
     if (e.errors) {
-        var parts = [];
+        var p = [];
         $.each(e.errors, function (k, v) {
-            if (v.errors) parts.push(v.errors.join('\n'));
-            else if (typeof v === 'string') parts.push(v);
+            if (v.errors) p.push(v.errors.join('\n'));
+            else if (typeof v === 'string') p.push(v);
         });
-        if (parts.length) msg = parts.join('\n');
+        if (p.length) msg = p.join('\n');
     } else if (e.xhr) {
         if (e.xhr.status === 401) msg = 'Session expired.';
         else if (e.xhr.status === 403) msg = 'Access denied.';

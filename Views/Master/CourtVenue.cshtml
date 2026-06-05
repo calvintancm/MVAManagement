@@ -26,17 +26,14 @@
     <div class="ptc-card-body" style="padding:16px 20px;">
         <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;">
             <div style="display:flex;flex-direction:column;gap:5px;flex:2;min-width:200px;">
-                <label class="filter-label">Venue Name / State</label>
+                <label class="filter-label">Venue Name / Code</label>
                 <input type="text" id="queryVenueName" class="k-textbox"
-                       style="width:100%;max-width:300px;" placeholder="Search venue or state..." />
+                       style="width:100%;max-width:300px;" placeholder="Search venue or code..." />
             </div>
-            <div style="display:flex;flex-direction:column;gap:5px;min-width:160px;">
-                <label class="filter-label">Court Type</label>
-                <select id="queryCourtType" style="width:160px;"></select>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:5px;min-width:130px;">
-                <label class="filter-label">Active</label>
-                <select id="queryIsActive" style="width:130px;"></select>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:180px;">
+                <label class="filter-label">Jurisdiction</label>
+                <input type="text" id="queryJurisdiction" class="k-textbox"
+                       style="width:180px;" placeholder="e.g. Kuala Lumpur..." />
             </div>
             <div style="display:flex;gap:8px;padding-bottom:1px;">
                 <button class="btn-ptc-primary" onclick="refreshGrid()">
@@ -65,35 +62,24 @@
 
 @section Scripts {
 <script>
-var courtTypes = [
-    { text: 'All',                   value: '' },
-    { text: 'Mahkamah Tinggi',       value: 'Mahkamah Tinggi' },
-    { text: 'Mahkamah Sesyen',       value: 'Mahkamah Sesyen' },
-    { text: 'Mahkamah Majistret',    value: 'Mahkamah Majistret' },
-    { text: 'Court of Appeal',       value: 'Court of Appeal' },
-    { text: 'Federal Court',         value: 'Federal Court' }
-];
-
-var malaysianStates = [
-    'Johor','Kedah','Kelantan','Melaka','Negeri Sembilan',
-    'Pahang','Perak','Perlis','Pulau Pinang','Sabah',
-    'Sarawak','Selangor','Terengganu','Kuala Lumpur',
-    'Labuan','Putrajaya'
+var malaysianJurisdictions = [
+    'Johor Bahru','Kluang','Muar','Batu Pahat',
+    'Kuala Lumpur','Putrajaya',
+    'Shah Alam','Petaling Jaya','Klang',
+    'Ipoh','Taiping',
+    'George Town','Butterworth',
+    'Kota Kinabalu','Sandakan',
+    'Kuching','Miri','Sibu',
+    'Seremban','Melaka','Alor Setar',
+    'Kota Bharu','Kuala Terengganu','Kuantan'
 ];
 
 $(function () {
     kendo.culture('en-GB');
 
-    $('#queryIsActive').kendoDropDownList({
-        dataTextField: 'text', dataValueField: 'value',
-        dataSource: [{ text: 'All', value: '' }, { text: 'Active', value: 'true' }, { text: 'Inactive', value: 'false' }],
-        value: ''
+    $('#queryVenueName, #queryJurisdiction').on('keypress', function (e) {
+        if (e.which === 13) refreshGrid();
     });
-    $('#queryCourtType').kendoDropDownList({
-        dataTextField: 'text', dataValueField: 'value',
-        dataSource: courtTypes, optionLabel: 'All Types', value: ''
-    });
-    $('#queryVenueName').on('keypress', function (e) { if (e.which === 13) refreshGrid(); });
 
     var isMobile = window.innerWidth <= 576;
 
@@ -106,7 +92,8 @@ $(function () {
                 destroy: { url: '@Url.Action("CourtVenueDestroy", "Master")', type: 'POST' },
                 parameterMap: function (data, operation) {
                     var token = $('input[name="__RequestVerificationToken"]').val();
-                    if (operation === 'read') return $.extend({}, data, getFilters(), { __RequestVerificationToken: token });
+                    if (operation === 'read')
+                        return $.extend({}, data, getFilters(), { __RequestVerificationToken: token });
                     return $.extend({}, data, { __RequestVerificationToken: token });
                 }
             },
@@ -115,14 +102,12 @@ $(function () {
                 model: {
                     id: 'Id',
                     fields: {
-                        Id:          { type: 'number', editable: false },
-                        VenueName:   { type: 'string', validation: { required: true } },
-                        CourtType:   { type: 'string', validation: { required: true } },
-                        State:       { type: 'string', validation: { required: true } },
-                        Address:     { type: 'string' },
-                        IsActive:    { type: 'boolean' },
-                        CreatedAt:   { type: 'date', editable: false },
-                        UpdatedAt:   { type: 'date', editable: false }
+                        Id:            { type: 'number', editable: false },
+                        VenueName:     { type: 'string', validation: { required: true } },
+                        VenueCode:     { type: 'string' },
+                        Jurisdiction:  { type: 'string' },
+                        Address:       { type: 'string' },
+                        ContactNumber: { type: 'string' }
                     }
                 }
             },
@@ -140,51 +125,45 @@ $(function () {
         columns: [
             { field: 'Id', hidden: true },
             {
-                field: 'VenueName', title: 'Venue Name', width: 240,
+                field: 'VenueCode', title: 'Code', width: 90,
+                template: function (d) {
+                    if (!d.VenueCode) return '<span style="color:#94a3b8;">—</span>';
+                    return '<span style="font-family:monospace;font-weight:700;font-size:0.82rem;'
+                         + 'background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:20px;">'
+                         + kendo.htmlEncode(d.VenueCode) + '</span>';
+                }
+            },
+            {
+                field: 'VenueName', title: 'Venue Name', width: 260,
                 template: '<span style="font-weight:600;">#: VenueName #</span>'
             },
             {
-                field: 'CourtType', title: 'Court Type', width: 170,
+                field: 'Jurisdiction', title: 'Jurisdiction', width: 170,
                 template: function (d) {
-                    var colors = {
-                        'Mahkamah Tinggi':    '#dbeafe',
-                        'Mahkamah Sesyen':    '#dcfce7',
-                        'Mahkamah Majistret': '#fef3c7',
-                        'Court of Appeal':    '#f3e8ff',
-                        'Federal Court':      '#fee2e2'
-                    };
-                    var bg = colors[d.CourtType] || '#f1f5f9';
-                    return '<span style="background:' + bg + ';padding:2px 10px;border-radius:20px;font-size:0.75rem;font-weight:600;">' + kendo.htmlEncode(d.CourtType || '') + '</span>';
+                    if (!d.Jurisdiction) return '<span style="color:#94a3b8;">—</span>';
+                    return '<span style="background:#dcfce7;color:#166534;padding:2px 10px;'
+                         + 'border-radius:20px;font-size:0.75rem;font-weight:600;">'
+                         + kendo.htmlEncode(d.Jurisdiction) + '</span>';
                 },
                 editor: function (container, options) {
                     $('<input name="' + options.field + '"/>').appendTo(container).kendoDropDownList({
-                        dataTextField: 'text', dataValueField: 'value',
-                        dataSource: courtTypes.filter(function (c) { return c.value !== ''; }),
-                        value: options.model.CourtType
+                        dataSource: malaysianJurisdictions,
+                        value: options.model.Jurisdiction,
+                        optionLabel: '— Select —'
                     });
                 }
             },
             {
-                field: 'State', title: 'State', width: 150,
-                editor: function (container, options) {
-                    $('<input name="' + options.field + '"/>').appendTo(container).kendoDropDownList({
-                        dataSource: malaysianStates,
-                        value: options.model.State
-                    });
-                }
-            },
-            {
-                field: 'Address', title: 'Address', width: 260,
+                field: 'Address', title: 'Address', width: 240, hidden: isMobile,
                 template: '#= Address || "-" #'
             },
             {
-                field: 'IsActive', title: 'Active', width: 80,
-                attributes: { style: 'text-align:center;' },
-                template: '# if(IsActive){ #<span class="badge-active">Active</span># }else{ #<span class="badge-inactive">Inactive</span># } #'
-            },
-            {
-                field: 'UpdatedAt', title: 'Updated', width: 140, hidden: isMobile,
-                template: '#= UpdatedAt ? kendo.toString(kendo.parseDate(UpdatedAt), "dd/MM/yyyy HH:mm") : "-" #'
+                field: 'ContactNumber', title: 'Contact No.', width: 130, hidden: isMobile,
+                template: function (d) {
+                    if (!d.ContactNumber) return '<span style="color:#94a3b8;">—</span>';
+                    return '<a href="tel:' + kendo.htmlEncode(d.ContactNumber) + '" style="color:#1d6fa4;">'
+                         + kendo.htmlEncode(d.ContactNumber) + '</a>';
+                }
             },
             {
                 command: [
@@ -195,8 +174,10 @@ $(function () {
                             e.preventDefault();
                             var grid  = $('#main_grid').data('kendoGrid');
                             var model = grid.dataItem($(e.target).closest('tr'));
-                            KSwal.confirmDelete('Delete Venue?',
-                                'Delete <strong>' + model.VenueName + '</strong>? Hearing records referencing this venue will be affected.',
+                            KSwal.confirmDelete(
+                                'Delete Venue?',
+                                'Delete <strong>' + model.VenueName + '</strong>?'
+                                + ' Hearing records referencing this venue will be affected.',
                                 function () { grid.dataSource.remove(model); grid.dataSource.sync(); }
                             );
                         }
@@ -210,23 +191,21 @@ $(function () {
         pageable: { pageSize: 15, pageSizes: [15, 30, 50], buttonCount: 5 },
         sortable: true, scrollable: true, height: 520,
         dataBound: function () {
-            this.thead.find('th').css({ background: '#f8fafc', 'font-weight': '600', 'font-size': '0.77rem', color: '#475569', 'border-color': '#e2e8f0' });
+            this.thead.find('th').css({
+                background: '#f8fafc', 'font-weight': '600',
+                'font-size': '0.77rem', color: '#475569', 'border-color': '#e2e8f0'
+            });
         },
         save: function () { KSwal.toast('success', 'Court venue saved.'); }
     });
 
-    $('#queryIsActive').data('kendoDropDownList').bind('change', refreshGrid);
-    $('#queryCourtType').data('kendoDropDownList').bind('change', refreshGrid);
     refreshGrid();
 });
 
 function getFilters() {
-    var ddlActive = $('#queryIsActive').data('kendoDropDownList');
-    var ddlType   = $('#queryCourtType').data('kendoDropDownList');
     return {
-        venueName:  $('#queryVenueName').val().trim(),
-        courtType:  ddlType   ? ddlType.value()   : '',
-        isActive:   ddlActive ? ddlActive.value()  : ''
+        venueName:    $('#queryVenueName').val().trim(),
+        jurisdiction: $('#queryJurisdiction').val().trim()
     };
 }
 function refreshGrid() {
@@ -235,16 +214,25 @@ function refreshGrid() {
 }
 function clearFilters() {
     $('#queryVenueName').val('');
-    var da = $('#queryIsActive').data('kendoDropDownList'); if (da) da.value('');
-    var dc = $('#queryCourtType').data('kendoDropDownList'); if (dc) dc.value('');
+    $('#queryJurisdiction').val('');
     refreshGrid();
 }
 function openAddRow() { var g = $('#main_grid').data('kendoGrid'); if (g) g.addRow(); }
 function exportGrid() { var g = $('#main_grid').data('kendoGrid'); if (g) { g.saveAsExcel(); KSwal.toast('info', 'Exporting...'); } }
 function handleGridError(e) {
     var msg = 'An error occurred.';
-    if (e.errors) { var p = []; $.each(e.errors, function (k, v) { if (v.errors) p.push(v.errors.join('\n')); else if (typeof v === 'string') p.push(v); }); if (p.length) msg = p.join('\n'); }
-    else if (e.xhr) { if (e.xhr.status === 401) msg = 'Session expired.'; else if (e.xhr.status === 403) msg = 'Access denied.'; else if (e.xhr.status === 500) msg = 'Server error.'; }
+    if (e.errors) {
+        var p = [];
+        $.each(e.errors, function (k, v) {
+            if (v.errors) p.push(v.errors.join('\n'));
+            else if (typeof v === 'string') p.push(v);
+        });
+        if (p.length) msg = p.join('\n');
+    } else if (e.xhr) {
+        if (e.xhr.status === 401) msg = 'Session expired.';
+        else if (e.xhr.status === 403) msg = 'Access denied.';
+        else if (e.xhr.status === 500) msg = 'Server error. Check logs.';
+    }
     KSwal.error('Grid Error', msg);
 }
 </script>

@@ -35,6 +35,8 @@ namespace MVAManagement.Models.MVA
         /// <summary>Whether this account is currently active. Deactivate on resignation rather than deleting.</summary>
         public bool IsActive { get; set; } = true;
 
+
+
         // Navigation Properties
         public virtual ICollection<CaseFile> AssignedCases { get; set; } = new List<CaseFile>();
         public virtual ICollection<CaseJournal> JournalEntries { get; set; } = new List<CaseJournal>();

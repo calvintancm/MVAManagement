@@ -39,7 +39,7 @@ namespace MVAManagement.Controllers
         [HttpPost, ValidateAntiForgeryToken]
         public async Task<JsonResult> CaseStatusRead(
             int skip = 0, int take = 15,
-            string? statusName = null, string? isActive = null,
+            string? statusName = null,
             string? sort = null, string? dir = null)
         {
             try
@@ -47,22 +47,19 @@ namespace MVAManagement.Controllers
                 var q = _db.CaseStatuses.AsNoTracking().AsQueryable();
 
                 if (!string.IsNullOrWhiteSpace(statusName))
-                    q = q.Where(x => x.StatusName.Contains(statusName) || x.StatusCode.Contains(statusName));
-
-                if (bool.TryParse(isActive, out var active))
-                    q = q.Where(x => x.IsActive == active);
+                    q = q.Where(x => x.StatusName.Contains(statusName)
+                                   || (x.StatusCode != null && x.StatusCode.Contains(statusName)));
 
                 var total = await q.CountAsync();
 
-                // Sorting
                 q = (sort, dir) switch
                 {
-                    ("StatusCode",   "desc") => q.OrderByDescending(x => x.StatusCode),
-                    ("StatusCode",   _)      => q.OrderBy(x => x.StatusCode),
-                    ("StatusName",   "desc") => q.OrderByDescending(x => x.StatusName),
-                    ("StatusName",   _)      => q.OrderBy(x => x.StatusName),
+                    ("StatusCode", "desc") => q.OrderByDescending(x => x.StatusCode),
+                    ("StatusCode", _) => q.OrderBy(x => x.StatusCode),
+                    ("StatusName", "desc") => q.OrderByDescending(x => x.StatusName),
+                    ("StatusName", _) => q.OrderBy(x => x.StatusName),
                     ("DisplayOrder", "desc") => q.OrderByDescending(x => x.DisplayOrder),
-                    _                        => q.OrderBy(x => x.DisplayOrder)
+                    _ => q.OrderBy(x => x.DisplayOrder)
                 };
 
                 var data = await q.Skip(skip).Take(take).ToListAsync();
@@ -81,14 +78,13 @@ namespace MVAManagement.Controllers
             try
             {
                 if (!ModelState.IsValid)
-                    return GridError(string.Join("; ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage)));
+                    return GridError(string.Join("; ", ModelState.Values
+                        .SelectMany(v => v.Errors).Select(e => e.ErrorMessage)));
 
-                // Guard duplicate code
-                if (await _db.CaseStatuses.AnyAsync(x => x.StatusCode == model.StatusCode))
+                if (!string.IsNullOrWhiteSpace(model.StatusCode) &&
+                    await _db.CaseStatuses.AnyAsync(x => x.StatusCode == model.StatusCode))
                     return GridError($"Status code '{model.StatusCode}' already exists.");
 
-                model.CreatedAt = DateTime.UtcNow;
-                model.UpdatedAt = DateTime.UtcNow;
                 _db.CaseStatuses.Add(model);
                 await _db.SaveChangesAsync();
                 return GridResult(new[] { model }, 1);
@@ -108,13 +104,9 @@ namespace MVAManagement.Controllers
                 var existing = await _db.CaseStatuses.FindAsync(model.Id);
                 if (existing == null) return GridError("Record not found.");
 
-                existing.StatusCode   = model.StatusCode;
-                existing.StatusName   = model.StatusName;
-                existing.Description  = model.Description;
-                existing.HexColor     = model.HexColor;
+                existing.StatusName = model.StatusName;
+                existing.StatusCode = model.StatusCode;
                 existing.DisplayOrder = model.DisplayOrder;
-                existing.IsActive     = model.IsActive;
-                existing.UpdatedAt    = DateTime.UtcNow;
 
                 await _db.SaveChangesAsync();
                 return GridResult(new[] { existing }, 1);
@@ -134,9 +126,8 @@ namespace MVAManagement.Controllers
                 var existing = await _db.CaseStatuses.FindAsync(Id);
                 if (existing == null) return GridError("Record not found.");
 
-                // Safety: check if any case files use this status
                 var inUse = await _db.CaseFiles.AnyAsync(c => c.CaseStatusId == Id);
-                if (inUse) return GridError("Cannot delete — this status is in use by one or more case files.");
+                if (inUse) return GridError("Cannot delete — this status is used by one or more case files.");
 
                 _db.CaseStatuses.Remove(existing);
                 await _db.SaveChangesAsync();
@@ -149,6 +140,8 @@ namespace MVAManagement.Controllers
             }
         }
 
+
+
         // ══════════════════════════════════════════════════════════════════
         // 2. COURT VENUE
         // ══════════════════════════════════════════════════════════════════
@@ -159,32 +152,30 @@ namespace MVAManagement.Controllers
         [HttpPost, ValidateAntiForgeryToken]
         public async Task<JsonResult> CourtVenueRead(
             int skip = 0, int take = 15,
-            string? venueName = null, string? courtType = null,
-            string? isActive = null, string? sort = null, string? dir = null)
+            string? venueName = null, string? jurisdiction = null,
+            string? sort = null, string? dir = null)
         {
             try
             {
                 var q = _db.CourtVenues.AsNoTracking().AsQueryable();
 
                 if (!string.IsNullOrWhiteSpace(venueName))
-                    q = q.Where(x => x.VenueName.Contains(venueName) || x.State.Contains(venueName));
+                    q = q.Where(x => x.VenueName.Contains(venueName)
+                                   || (x.VenueCode != null && x.VenueCode.Contains(venueName)));
 
-                if (!string.IsNullOrWhiteSpace(courtType))
-                    q = q.Where(x => x.CourtType == courtType);
-
-                if (bool.TryParse(isActive, out var active))
-                    q = q.Where(x => x.IsActive == active);
+                if (!string.IsNullOrWhiteSpace(jurisdiction))
+                    q = q.Where(x => x.Jurisdiction != null && x.Jurisdiction.Contains(jurisdiction));
 
                 var total = await q.CountAsync();
 
                 q = (sort, dir) switch
                 {
-                    ("CourtType",  "desc") => q.OrderByDescending(x => x.CourtType),
-                    ("CourtType",  _)      => q.OrderBy(x => x.CourtType),
-                    ("State",      "desc") => q.OrderByDescending(x => x.State),
-                    ("State",      _)      => q.OrderBy(x => x.State),
-                    ("VenueName",  "desc") => q.OrderByDescending(x => x.VenueName),
-                    _                      => q.OrderBy(x => x.VenueName)
+                    ("VenueCode", "desc") => q.OrderByDescending(x => x.VenueCode),
+                    ("VenueCode", _) => q.OrderBy(x => x.VenueCode),
+                    ("Jurisdiction", "desc") => q.OrderByDescending(x => x.Jurisdiction),
+                    ("Jurisdiction", _) => q.OrderBy(x => x.Jurisdiction),
+                    ("VenueName", "desc") => q.OrderByDescending(x => x.VenueName),
+                    _ => q.OrderBy(x => x.VenueName)
                 };
 
                 var data = await q.Skip(skip).Take(take).ToListAsync();
@@ -203,10 +194,9 @@ namespace MVAManagement.Controllers
             try
             {
                 if (!ModelState.IsValid)
-                    return GridError(string.Join("; ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage)));
+                    return GridError(string.Join("; ", ModelState.Values
+                        .SelectMany(v => v.Errors).Select(e => e.ErrorMessage)));
 
-                model.CreatedAt = DateTime.UtcNow;
-                model.UpdatedAt = DateTime.UtcNow;
                 _db.CourtVenues.Add(model);
                 await _db.SaveChangesAsync();
                 return GridResult(new[] { model }, 1);
@@ -226,12 +216,11 @@ namespace MVAManagement.Controllers
                 var existing = await _db.CourtVenues.FindAsync(model.Id);
                 if (existing == null) return GridError("Record not found.");
 
-                existing.VenueName  = model.VenueName;
-                existing.CourtType  = model.CourtType;
-                existing.State      = model.State;
-                existing.Address    = model.Address;
-                existing.IsActive   = model.IsActive;
-                existing.UpdatedAt  = DateTime.UtcNow;
+                existing.VenueName = model.VenueName;
+                existing.VenueCode = model.VenueCode;
+                existing.Jurisdiction = model.Jurisdiction;
+                existing.Address = model.Address;
+                existing.ContactNumber = model.ContactNumber;
 
                 await _db.SaveChangesAsync();
                 return GridResult(new[] { existing }, 1);
@@ -264,6 +253,7 @@ namespace MVAManagement.Controllers
                 return GridError("Failed to delete court venue.");
             }
         }
+
 
         // ══════════════════════════════════════════════════════════════════
         // 3. INSURER REGISTRY

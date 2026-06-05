@@ -23,6 +23,8 @@ namespace MVAManagement.Models.MVA
         /// <summary>Whether this insurer is currently active in the registry.</summary>
         public bool IsActive { get; set; } = true;
 
+      
+
         // Navigation Property
         public virtual ICollection<AccidentVehicle> InsuredVehicles { get; set; } = new List<AccidentVehicle>();
     }
