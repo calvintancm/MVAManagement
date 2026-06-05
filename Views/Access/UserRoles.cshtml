@@ -1,0 +1,416 @@
+@{
+    ViewData["Title"] = "User / Role Management";
+    ViewData["BreadcrumbSection"] = "Security";
+    ViewData["BreadcrumbPage"] = "User / Role Management";
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">User / Role Management</h1>
+        <p class="page-subtitle">Manage system users and their access roles</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-ptc-outline" onclick="exportGrid()">
+            <i class="bi bi-download"></i> Export
+        </button>
+    </div>
+</div>
+
+@* Info Banner *@
+<div class="ptc-card mb-3" style="border-left:4px solid #dc2626;">
+    <div class="ptc-card-body" style="padding:14px 20px;">
+        <div style="display:flex;align-items:flex-start;gap:12px;">
+            <i class="bi bi-shield-lock-fill" style="color:#dc2626;font-size:18px;margin-top:2px;flex-shrink:0;"></i>
+            <div style="font-size:0.8rem;color:var(--text-muted);line-height:1.6;">
+                Users are managed via ASP.NET Identity (<strong>AspNetUsers</strong>).
+                Assign roles by clicking <strong>Edit</strong> on a row — enter comma-separated role names
+                (e.g. <code>Admin</code>, <code>Solicitor</code>, <code>Caseworker</code>, <code>Finance</code>).
+                Use <strong>Lock</strong> to disable login without deleting the account.
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Role Legend *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-body" style="padding:12px 20px;">
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+            <span style="font-size:0.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-right:4px;">Roles:</span>
+            <span class="role-badge role-admin">Admin</span>
+            <span class="role-badge role-solicitor">Solicitor</span>
+            <span class="role-badge role-caseworker">Caseworker</span>
+            <span class="role-badge role-finance">Finance</span>
+            <span style="font-size:0.75rem;color:var(--text-muted);margin-left:8px;">
+                — Enter exact role names when editing. Multiple roles: comma-separated.
+            </span>
+        </div>
+    </div>
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-body" style="padding:16px 20px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;">
+
+            <div style="display:flex;flex-direction:column;gap:5px;flex:2;min-width:200px;">
+                <label class="filter-label">Username / Email</label>
+                <input type="text" id="queryUserName" class="k-textbox"
+                       style="width:100%;max-width:280px;" placeholder="Search..." />
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:150px;">
+                <label class="filter-label">Role</label>
+                <select id="queryRole" style="width:150px;"></select>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:130px;">
+                <label class="filter-label">Status</label>
+                <select id="queryIsActive" style="width:130px;"></select>
+            </div>
+
+            <div style="display:flex;gap:8px;padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="refreshGrid()">
+                    <i class="bi bi-search"></i> Search
+                </button>
+                <button class="btn-ptc-outline" onclick="clearFilters()">
+                    <i class="bi bi-x-circle"></i> Clear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Grid Card *@
+<div class="ptc-card">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title">
+            <i class="bi bi-people"></i> System Users
+        </h2>
+        <span id="recordCount" class="record-count-badge">0 records</span>
+    </div>
+    <div class="ptc-card-body" style="padding:0;">
+        <div id="main_grid"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+var token = $('input[name="__RequestVerificationToken"]').val();
+var isMobile = window.innerWidth <= 576;
+
+$(function () {
+    kendo.culture('en-GB');
+
+    $('#queryIsActive').kendoDropDownList({
+        dataTextField: 'text', dataValueField: 'value',
+        dataSource: [
+            { text: 'All',      value: '' },
+            { text: 'Active',   value: 'true' },
+            { text: 'Locked',   value: 'false' }
+        ],
+        value: ''
+    });
+
+    $('#queryRole').kendoDropDownList({
+        dataTextField: 'text', dataValueField: 'value',
+        dataSource: [
+            { text: 'All Roles',  value: '' },
+            { text: 'Admin',      value: 'Admin' },
+            { text: 'Solicitor',  value: 'Solicitor' },
+            { text: 'Caseworker', value: 'Caseworker' },
+            { text: 'Finance',    value: 'Finance' }
+        ],
+        value: ''
+    });
+
+    $('#queryUserName').on('keypress', function (e) {
+        if (e.which === 13) refreshGrid();
+    });
+
+    /* ══════════════════════════════════════════════════════════════
+       KENDO GRID — Users
+    ══════════════════════════════════════════════════════════════ */
+    $('#main_grid').kendoGrid({
+        dataSource: {
+            transport: {
+                read: {
+                    url:  '@Url.Action("UserRolesRead", "Access")',
+                    type: 'POST'
+                },
+                parameterMap: function (data, operation) {
+                    if (operation === 'read')
+                        return $.extend({}, data, getFilters(), { __RequestVerificationToken: token });
+                    return $.extend({}, data, { __RequestVerificationToken: token });
+                }
+            },
+            schema: {
+                data: 'Data', total: 'Total', errors: 'Errors',
+                model: {
+                    id: 'Id',
+                    fields: {
+                        Id:                 { type: 'string',  editable: false },
+                        UserName:           { type: 'string',  editable: false },
+                        Email:              { type: 'string',  editable: false },
+                        PhoneNumber:        { type: 'string',  editable: false },
+                        Roles:              { type: 'string'  },  // editable — comma-separated
+                        EmailConfirmed:     { type: 'boolean', editable: false },
+                        TwoFactorEnabled:   { type: 'boolean', editable: false },
+                        AccessFailedCount:  { type: 'number',  editable: false },
+                        IsLocked:           { type: 'boolean', editable: false },
+                        LockoutEnd:         { type: 'string',  editable: false },
+                        LastLoginAt:        { type: 'string',  editable: false }
+                    }
+                }
+            },
+            pageSize: 20, serverPaging: true, serverSorting: true,
+            sort: { field: 'UserName', dir: 'asc' },
+            requestEnd: function (e) {
+                if (e.type === 'read' && e.response) {
+                    var t = e.response.Total || 0;
+                    $('#recordCount').text(t + ' record' + (t !== 1 ? 's' : ''));
+                }
+            },
+            error: function (e) { handleGridError(e); }
+        },
+
+        columns: [
+            { field: 'Id', hidden: true },
+            {
+                // Username + lock indicator
+                field: 'UserName', title: 'Username', width: 180,
+                template: function (d) {
+                    var lockIcon = d.IsLocked
+                        ? ' <i class="bi bi-lock-fill" style="color:#dc2626;font-size:12px;" title="Account locked"></i>'
+                        : '';
+                    return '<span style="font-weight:600;">' + kendo.htmlEncode(d.UserName || '') + '</span>' + lockIcon;
+                }
+            },
+            {
+                field: 'Email', title: 'Email', width: 210, hidden: isMobile,
+                template: function (d) {
+                    if (!d.Email) return '<span style="color:#94a3b8;">—</span>';
+                    var confirmed = d.EmailConfirmed
+                        ? '<i class="bi bi-patch-check-fill" style="color:#16a34a;font-size:12px;margin-left:4px;" title="Confirmed"></i>'
+                        : '<i class="bi bi-exclamation-circle" style="color:#f59e0b;font-size:12px;margin-left:4px;" title="Not confirmed"></i>';
+                    return '<span style="font-size:0.85rem;">' + kendo.htmlEncode(d.Email) + '</span>' + confirmed;
+                }
+            },
+            {
+                // Roles — the only editable column
+                field: 'Roles', title: 'Roles', width: 220,
+                template: function (d) {
+                    if (!d.Roles) return '<span style="color:#94a3b8;font-size:0.8rem;">No roles</span>';
+                    var html = '';
+                    d.Roles.split(',').forEach(function (r) {
+                        r = r.trim();
+                        if (!r) return;
+                        var cls = 'role-' + r.toLowerCase();
+                        html += '<span class="role-badge ' + cls + '">' + kendo.htmlEncode(r) + '</span> ';
+                    });
+                    return html;
+                }
+            },
+            {
+                field: 'LastLoginAt', title: 'Last Login', width: 140, hidden: isMobile,
+                template: '#= LastLoginAt || "-" #'
+            },
+            {
+                field: 'AccessFailedCount', title: 'Failed', width: 70,
+                attributes: { style: 'text-align:center;' },
+                template: function (d) {
+                    if (!d.AccessFailedCount) return '<span style="color:#94a3b8;">0</span>';
+                    return '<span style="color:#dc2626;font-weight:700;">' + d.AccessFailedCount + '</span>';
+                }
+            },
+            {
+                field: 'TwoFactorEnabled', title: '2FA', width: 60,
+                attributes: { style: 'text-align:center;' },
+                template: '# if(TwoFactorEnabled){ #<i class="bi bi-shield-check" style="color:#16a34a;"></i># }else{ #<i class="bi bi-shield" style="color:#94a3b8;"></i># } #'
+            },
+            {
+                // Custom action column — lock/unlock + reset + edit
+                title: 'Actions', width: 260,
+                template: function (d) {
+                    var lockBtn = d.IsLocked
+                        ? '<button class="btn-grid-action btn-unlock" onclick="toggleLock(\'' + d.Id + '\', false)" title="Unlock account">'
+                          + '<i class="bi bi-unlock"></i> Unlock</button>'
+                        : '<button class="btn-grid-action btn-lock" onclick="toggleLock(\'' + d.Id + '\', true)" title="Lock account">'
+                          + '<i class="bi bi-lock"></i> Lock</button>';
+
+                    var resetBtn = d.AccessFailedCount > 0
+                        ? '<button class="btn-grid-action btn-reset" onclick="resetFailed(\'' + d.Id + '\')" title="Reset failed login count">'
+                          + '<i class="bi bi-arrow-counterclockwise"></i> Reset</button>'
+                        : '';
+
+                    return '<div style="display:flex;gap:5px;flex-wrap:wrap;">'
+                         + lockBtn + resetBtn
+                         + '</div>';
+                }
+            },
+            {
+                command: [{
+                    name: 'edit',
+                    text: { edit: ' Edit Roles', update: ' Save', cancel: ' Cancel' }
+                }],
+                title: '', width: 170
+            }
+        ],
+
+        // Only Roles field is editable — inline
+        editable: 'inline',
+
+        // Override save to POST to AssignRoles endpoint
+        save: function (e) {
+            e.preventDefault();
+            var grid  = $('#main_grid').data('kendoGrid');
+            var model = e.model;
+
+            $.post('@Url.Action("AssignRoles", "Access")', {
+                userId: model.Id,
+                roles:  model.Roles || '',
+                __RequestVerificationToken: token
+            })
+            .done(function (res) {
+                if (res && res.Errors) {
+                    var msg = '';
+                    $.each(res.Errors, function (k, v) {
+                        if (v.errors) msg += v.errors.join('\n');
+                    });
+                    KSwal.error('Save failed', msg || 'Unknown error');
+                } else {
+                    KSwal.toast('success', 'Roles updated successfully.');
+                    grid.cancelRow();
+                    grid.dataSource.read();
+                }
+            })
+            .fail(function () {
+                KSwal.error('Error', 'Failed to save roles. Check server logs.');
+            });
+        },
+
+        pageable: { pageSize: 20, pageSizes: [20, 50, 100], buttonCount: 5 },
+        sortable: true, scrollable: true, height: 560,
+        dataBound: function () {
+            this.thead.find('th').css({
+                background: '#f8fafc', 'font-weight': '600',
+                'font-size': '0.77rem', color: '#475569', 'border-color': '#e2e8f0'
+            });
+        }
+    });
+
+    $('#queryIsActive').data('kendoDropDownList').bind('change', refreshGrid);
+    $('#queryRole').data('kendoDropDownList').bind('change', refreshGrid);
+    refreshGrid();
+});
+
+/* ── Actions ── */
+function toggleLock(userId, lockUser) {
+    var msg = lockUser
+        ? 'Lock this account? The user will not be able to log in.'
+        : 'Unlock this account?';
+
+    KSwal.confirm(lockUser ? 'Lock Account?' : 'Unlock Account?', msg, function () {
+        $.post('@Url.Action("ToggleLock", "Access")', {
+            userId: userId, lockUser: lockUser,
+            __RequestVerificationToken: token
+        })
+        .done(function (res) {
+            if (res && res.Errors) {
+                var e = res.Errors;
+                KSwal.error('Failed', e.error ? e.error.errors[0] : 'Unknown error');
+            } else {
+                KSwal.toast('success', lockUser ? 'Account locked.' : 'Account unlocked.');
+                refreshGrid();
+            }
+        })
+        .fail(function () { KSwal.error('Error', 'Server error.'); });
+    });
+}
+
+function resetFailed(userId) {
+    KSwal.confirm('Reset Failed Count?',
+        'Reset the access-failed login counter for this user?', function () {
+        $.post('@Url.Action("ResetFailedCount", "Access")', {
+            userId: userId,
+            __RequestVerificationToken: token
+        })
+        .done(function () {
+            KSwal.toast('success', 'Failed count reset.');
+            refreshGrid();
+        })
+        .fail(function () { KSwal.error('Error', 'Server error.'); });
+    });
+}
+
+function getFilters() {
+    var ddlActive = $('#queryIsActive').data('kendoDropDownList');
+    var ddlRole   = $('#queryRole').data('kendoDropDownList');
+    return {
+        userName: $('#queryUserName').val().trim(),
+        role:     ddlRole   ? ddlRole.value()   : '',
+        isActive: ddlActive ? ddlActive.value() : ''
+    };
+}
+function refreshGrid() {
+    var g = $('#main_grid').data('kendoGrid');
+    if (g) g.dataSource.query({ page: 1, pageSize: g.dataSource.pageSize(), sort: g.dataSource.sort() });
+}
+function clearFilters() {
+    $('#queryUserName').val('');
+    var da = $('#queryIsActive').data('kendoDropDownList'); if (da) da.value('');
+    var dr = $('#queryRole').data('kendoDropDownList');     if (dr) dr.value('');
+    refreshGrid();
+}
+function exportGrid() {
+    var g = $('#main_grid').data('kendoGrid');
+    if (g) { g.saveAsExcel(); KSwal.toast('info', 'Exporting...'); }
+}
+function handleGridError(e) {
+    var msg = 'An error occurred.';
+    if (e.errors) {
+        var p = [];
+        $.each(e.errors, function (k, v) {
+            if (v.errors) p.push(v.errors.join('\n'));
+            else if (typeof v === 'string') p.push(v);
+        });
+        if (p.length) msg = p.join('\n');
+    } else if (e.xhr) {
+        if (e.xhr.status === 401) msg = 'Session expired.';
+        else if (e.xhr.status === 403) msg = 'Access denied.';
+        else if (e.xhr.status === 500) msg = 'Server error. Check logs.';
+    }
+    KSwal.error('Grid Error', msg);
+}
+</script>
+
+<style>
+/* Role badges */
+.role-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    margin-right: 3px;
+}
+.role-admin      { background:#fee2e2; color:#991b1b; }
+.role-solicitor  { background:#dbeafe; color:#1e40af; }
+.role-caseworker { background:#dcfce7; color:#166534; }
+.role-finance    { background:#fef3c7; color:#92400e; }
+
+/* Grid action buttons */
+.btn-grid-action {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border-radius: 6px;
+    font-size: 0.72rem; font-weight: 600;
+    border: 1px solid; cursor: pointer;
+    transition: opacity 0.15s;
+}
+.btn-grid-action:hover { opacity: 0.8; }
+.btn-lock   { background:#fee2e2; color:#dc2626; border-color:#fecaca; }
+.btn-unlock { background:#dcfce7; color:#16a34a; border-color:#bbf7d0; }
+.btn-reset  { background:#fef3c7; color:#92400e; border-color:#fde68a; }
+</style>
+}

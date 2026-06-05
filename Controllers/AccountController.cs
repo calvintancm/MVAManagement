@@ -3,9 +3,13 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using MVAManagement.Data;
 using MVAManagement.Models;
+using MVAManagement.Models.MVA;
 using MVAManagement.ViewModels.Account;
 using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
+
 
 namespace MVAManagement.Controllers
 {
@@ -16,18 +20,23 @@ namespace MVAManagement.Controllers
         private readonly IConfiguration _configuration;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly RoleManager<IdentityRole> _roleManager;
-
+        private readonly ApplicationDbContext _db;
+        // Step 2: Replace the constructor with this:
         public AccountController(
             ILogger<AccountController> logger,
             IConfiguration configuration,
             UserManager<ApplicationUser> userManager,
-            RoleManager<IdentityRole> roleManager)
+            RoleManager<IdentityRole> roleManager,
+            ApplicationDbContext db)                         // ← ADD THIS PARAMETER
         {
             _logger = logger;
             _configuration = configuration;
             _userManager = userManager;
             _roleManager = roleManager;
+            _db = db;                             // ← ADD THIS LINE
         }
+
+
 
         // ─────────────────────────────────────────────────────────────────
         // GET /Account/Login
@@ -53,23 +62,17 @@ namespace MVAManagement.Controllers
         //   5. Build ClaimsIdentity and sign-in with cookie auth
         //   6. Redirect to returnUrl or Dashboard
         // ─────────────────────────────────────────────────────────────────
+        // ═══════════════════════════════════════════════════════════════
+        // LOGIN POST — full replacement
+        // ═══════════════════════════════════════════════════════════════
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Login(LoginViewModel model, string returnUrl = null)
         {
             ViewBag.ReturnUrl = returnUrl;
+            if (!ModelState.IsValid) return View(model);
 
-            if (!ModelState.IsValid)
-                return View(model);
-
-            // 1. Find user by username (case-insensitive — UserManager normalises)
             var user = await _userManager.FindByNameAsync(model.UserName.Trim());
-
-            if (user != null)
-            {
-                user.LastLoginAt = DateTime.UtcNow;
-                await _userManager.UpdateAsync(user);
-            }
 
             if (user == null)
             {
@@ -78,7 +81,6 @@ namespace MVAManagement.Controllers
                 return View(model);
             }
 
-            // 2. Check lockout before verifying password
             if (await _userManager.IsLockedOutAsync(user))
             {
                 _logger.LogWarning("Locked-out login attempt: {User}", model.UserName);
@@ -86,58 +88,80 @@ namespace MVAManagement.Controllers
                 return View(model);
             }
 
-            // 3. Verify password against AspNetUsers.PasswordHash
             var passwordOk = await _userManager.CheckPasswordAsync(user, model.Password);
-
             if (!passwordOk)
             {
-                // Increment access-failed count (supports lockout if configured)
                 await _userManager.AccessFailedAsync(user);
-
                 _logger.LogWarning("Login failed — wrong password for: {User}", model.UserName);
                 TempData["ErrorMessage"] = "Invalid username or password.";
                 return View(model);
             }
 
-            // 4. Password correct — reset failed count
             await _userManager.ResetAccessFailedCountAsync(user);
 
-            // 5. Collect roles
             var roles = await _userManager.GetRolesAsync(user);
 
-            // 6. Build claims
             var claims = new List<Claim>
-            {
-                new Claim(ClaimTypes.NameIdentifier, user.Id),
-                new Claim(ClaimTypes.Name,           user.UserName ?? model.UserName),
-                new Claim(ClaimTypes.Email,          user.Email    ?? string.Empty),
-            };
-
-            // Add a claim per role (works with [Authorize(Roles="...")] and policies)
+    {
+        new Claim(ClaimTypes.NameIdentifier, user.Id),
+        new Claim(ClaimTypes.Name,           user.UserName ?? model.UserName),
+        new Claim(ClaimTypes.Email,          user.Email    ?? string.Empty),
+    };
             foreach (var role in roles)
                 claims.Add(new Claim(ClaimTypes.Role, role));
 
-            var identity  = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+            var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
             var principal = new ClaimsPrincipal(identity);
 
-            // 7. Sign in — honour "Remember Me" for 8-hour sliding window
             var authProps = new AuthenticationProperties
             {
-                IsPersistent    = model.RememberMe,
-                ExpiresUtc      = model.RememberMe
-                                    ? DateTimeOffset.UtcNow.AddHours(8)
-                                    : (DateTimeOffset?)null,
-                AllowRefresh    = true
+                IsPersistent = model.RememberMe,
+                ExpiresUtc = model.RememberMe ? DateTimeOffset.UtcNow.AddHours(8) : (DateTimeOffset?)null,
+                AllowRefresh = true
             };
 
             await HttpContext.SignInAsync(
-                CookieAuthenticationDefaults.AuthenticationScheme,
-                principal,
-                authProps);
+                CookieAuthenticationDefaults.AuthenticationScheme, principal, authProps);
 
-            // Store display name in session for convenience
-            HttpContext.Session.SetString("UserName",  user.UserName ?? model.UserName);
-            HttpContext.Session.SetString("UserEmail", user.Email    ?? string.Empty);
+            // ── Update LastLoginAt ────────────────────────────────────
+            user.LastLoginAt = DateTime.UtcNow;
+            await _userManager.UpdateAsync(user);
+
+            // ── Write session audit log ───────────────────────────────
+            var sessionId = Guid.NewGuid().ToString();
+            HttpContext.Session.SetString("AuditSessionId", sessionId);
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "";
+            var userAgent = HttpContext.Request.Headers["User-Agent"].ToString();
+            var computerName = string.Empty;
+            try
+            {
+                // Best-effort reverse DNS — may not resolve in all environments
+                var ipAddr = HttpContext.Connection.RemoteIpAddress;
+                if (ipAddr != null)
+                {
+                    var hostEntry = await System.Net.Dns.GetHostEntryAsync(ipAddr);
+                    computerName = hostEntry.HostName;
+                }
+            }
+            catch { /* non-critical */ }
+
+            _db.AuditSessionLogs.Add(new AuditSessionLog
+            {
+                UserId = user.Id,
+                Username = user.UserName ?? model.UserName,
+                SessionId = sessionId,
+                IpAddress = ip,
+                ComputerName = computerName,
+                UserAgent = userAgent,
+                LoginTime = DateTime.UtcNow,
+                IsActive = true,
+                IsFlaggedSuspicious = false
+            });
+            await _db.SaveChangesAsync();
+
+            HttpContext.Session.SetString("UserName", user.UserName ?? model.UserName);
+            HttpContext.Session.SetString("UserEmail", user.Email ?? string.Empty);
             HttpContext.Session.SetString("UserRoles", string.Join(",", roles));
 
             _logger.LogInformation("User {User} logged in. Roles: [{Roles}]",
@@ -146,20 +170,39 @@ namespace MVAManagement.Controllers
             return RedirectToLocal(returnUrl);
         }
 
-        // ─────────────────────────────────────────────────────────────────
-        // POST /Account/Logout
-        // ─────────────────────────────────────────────────────────────────
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        [Authorize]
-        public async Task<IActionResult> Logout()
+
+        // ═══════════════════════════════════════════════════════════════
+// LOGOUT POST — full replacement
+// ═══════════════════════════════════════════════════════════════
+[HttpPost]
+[ValidateAntiForgeryToken]
+[Authorize]
+public async Task<IActionResult> Logout()
+{
+    var userName  = User.Identity?.Name;
+    var sessionId = HttpContext.Session.GetString("AuditSessionId");
+ 
+    // ── Close session audit log entry ─────────────────────────
+    if (!string.IsNullOrEmpty(sessionId))
+    {
+        var session = await _db.AuditSessionLogs
+            .FirstOrDefaultAsync(s => s.SessionId == sessionId && s.IsActive);
+ 
+        if (session != null)
         {
-            var userName = User.Identity?.Name;
-            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            HttpContext.Session.Clear();
-            _logger.LogInformation("User {User} logged out.", userName);
-            return RedirectToAction("Login", "Account");
+            session.IsActive     = false;
+            session.LogoutTime   = DateTime.UtcNow;
+            session.LogoutReason = "User Logout";
+            await _db.SaveChangesAsync();
         }
+    }
+ 
+    await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    HttpContext.Session.Clear();
+ 
+    _logger.LogInformation("User {User} logged out.", userName);
+    return RedirectToAction("Login", "Account");
+}
 
         // ─────────────────────────────────────────────────────────────────
         // GET /Account/AccessDenied

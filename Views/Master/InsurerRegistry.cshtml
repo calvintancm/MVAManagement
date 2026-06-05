@@ -60,155 +60,170 @@
 </div>
 
 @section Scripts {
-<script>
-$(function () {
-    kendo.culture('en-GB');
+    <script>
+        $(function () {
+            kendo.culture('en-GB');
 
-    $('#queryIsActive').kendoDropDownList({
-        dataTextField: 'text', dataValueField: 'value',
-        dataSource: [{ text: 'All', value: '' }, { text: 'Active', value: 'true' }, { text: 'Inactive', value: 'false' }],
-        value: ''
-    });
-    $('#queryInsurerName').on('keypress', function (e) { if (e.which === 13) refreshGrid(); });
+            $('#queryIsActive').kendoDropDownList({
+                dataTextField: 'text', dataValueField: 'value',
+                dataSource: [
+                    { text: 'All',      value: '' },
+                    { text: 'Active',   value: 'true' },
+                    { text: 'Inactive', value: 'false' }
+                ],
+                value: ''
+            });
 
-    var isMobile = window.innerWidth <= 576;
+            $('#queryInsurerName').on('keypress', function (e) {
+                if (e.which === 13) refreshGrid();
+            });
 
-    $('#main_grid').kendoGrid({
-        dataSource: {
-            transport: {
-                read:    { url: '@Url.Action("InsurerRead",    "Master")', type: 'POST' },
-                update:  { url: '@Url.Action("InsurerUpdate",  "Master")', type: 'POST' },
-                create:  { url: '@Url.Action("InsurerCreate",  "Master")', type: 'POST' },
-                destroy: { url: '@Url.Action("InsurerDestroy", "Master")', type: 'POST' },
-                parameterMap: function (data, operation) {
-                    var token = $('input[name="__RequestVerificationToken"]').val();
-                    if (operation === 'read') return $.extend({}, data, getFilters(), { __RequestVerificationToken: token });
-                    return $.extend({}, data, { __RequestVerificationToken: token });
-                }
-            },
-            schema: {
-                data: 'Data', total: 'Total', errors: 'Errors',
-                model: {
-                    id: 'Id',
-                    fields: {
-                        Id:              { type: 'number', editable: false },
-                        InsurerCode:     { type: 'string', validation: { required: true, maxlength: 20 } },
-                        InsurerName:     { type: 'string', validation: { required: true } },
-                        ContactPerson:   { type: 'string' },
-                        ContactEmail:    { type: 'string' },
-                        ContactPhone:    { type: 'string' },
-                        Address:         { type: 'string' },
-                        IsActive:        { type: 'boolean' },
-                        CreatedAt:       { type: 'date', editable: false },
-                        UpdatedAt:       { type: 'date', editable: false }
-                    }
-                }
-            },
-            pageSize: 15, serverPaging: true, serverSorting: true,
-            sort: { field: 'InsurerName', dir: 'asc' },
-            requestEnd: function (e) {
-                if (e.type === 'read' && e.response) {
-                    var t = e.response.Total || 0;
-                    $('#recordCount').text(t + ' record' + (t !== 1 ? 's' : ''));
-                }
-            },
-            error: function (e) { handleGridError(e); }
-        },
+            var isMobile = window.innerWidth <= 576;
 
-        columns: [
-            { field: 'Id', hidden: true },
-            {
-                field: 'InsurerCode', title: 'Code', width: 100,
-                template: '<span style="font-family:monospace;font-weight:700;font-size:0.82rem;">#: InsurerCode #</span>'
-            },
-            {
-                field: 'InsurerName', title: 'Insurer Name', width: 230,
-                template: '<span style="font-weight:600;">#: InsurerName #</span>'
-            },
-            {
-                field: 'ContactPerson', title: 'Contact Person', width: 150,
-                hidden: isMobile,
-                template: '#= ContactPerson || "-" #'
-            },
-            {
-                field: 'ContactEmail', title: 'Email', width: 190,
-                hidden: isMobile,
-                template: function (d) {
-                    if (!d.ContactEmail) return '-';
-                    return '<a href="mailto:' + kendo.htmlEncode(d.ContactEmail) + '" style="color:#1d6fa4;">' + kendo.htmlEncode(d.ContactEmail) + '</a>';
-                }
-            },
-            {
-                field: 'ContactPhone', title: 'Phone', width: 130,
-                template: '#= ContactPhone || "-" #'
-            },
-            {
-                field: 'Address', title: 'Address', width: 220,
-                hidden: isMobile,
-                template: '#= Address || "-" #'
-            },
-            {
-                field: 'IsActive', title: 'Active', width: 80,
-                attributes: { style: 'text-align:center;' },
-                template: '# if(IsActive){ #<span class="badge-active">Active</span># }else{ #<span class="badge-inactive">Inactive</span># } #'
-            },
-            {
-                field: 'UpdatedAt', title: 'Updated', width: 140, hidden: isMobile,
-                template: '#= UpdatedAt ? kendo.toString(kendo.parseDate(UpdatedAt), "dd/MM/yyyy HH:mm") : "-" #'
-            },
-            {
-                command: [
-                    { name: 'edit', text: { edit: ' Edit', update: ' Save', cancel: ' Cancel' } },
-                    {
-                        name: 'destroy', text: ' Delete',
-                        click: function (e) {
-                            e.preventDefault();
-                            var grid  = $('#main_grid').data('kendoGrid');
-                            var model = grid.dataItem($(e.target).closest('tr'));
-                            KSwal.confirmDelete('Delete Insurer?',
-                                'Delete <strong>' + model.InsurerName + '</strong>? Cases linked to this insurer may be affected.',
-                                function () { grid.dataSource.remove(model); grid.dataSource.sync(); }
-                            );
+            $('#main_grid').kendoGrid({
+                dataSource: {
+                    transport: {
+                        read:    { url: '@Url.Action("InsurerRead", "Master")', type: 'POST' },
+                        update:  { url: '@Url.Action("InsurerUpdate", "Master")', type: 'POST' },
+                        create:  { url: '@Url.Action("InsurerCreate", "Master")', type: 'POST' },
+                        destroy: { url: '@Url.Action("InsurerDestroy", "Master")', type: 'POST' },
+                        parameterMap: function (data, operation) {
+                            var token = $('input[name="__RequestVerificationToken"]').val();
+                            if (operation === 'read')
+                                return $.extend({}, data, getFilters(), { __RequestVerificationToken: token });
+                            return $.extend({}, data, { __RequestVerificationToken: token });
                         }
+                    },
+                    schema: {
+                        data: 'Data', total: 'Total', errors: 'Errors',
+                        model: {
+                            id: 'Id',
+                            fields: {
+                                Id:                   { type: 'number',  editable: false },
+                                InsurerName:          { type: 'string',  validation: { required: true } },
+                                InsurerCode:          { type: 'string' },
+                                ClaimsContactNumber:  { type: 'string' },
+                                ClaimsEmail:          { type: 'string' },
+                                IsActive:             { type: 'boolean' }
+                            }
+                        }
+                    },
+                    pageSize: 15, serverPaging: true, serverSorting: true,
+                    sort: { field: 'InsurerName', dir: 'asc' },
+                    requestEnd: function (e) {
+                        if (e.type === 'read' && e.response) {
+                            var t = e.response.Total || 0;
+                            $('#recordCount').text(t + ' record' + (t !== 1 ? 's' : ''));
+                        }
+                    },
+                    error: function (e) { handleGridError(e); }
+                },
+
+                columns: [
+                    { field: 'Id', hidden: true },
+                    {
+                        field: 'InsurerCode', title: 'Code', width: 90,
+                        template: function (d) {
+                            if (!d.InsurerCode) return '<span style="color:#94a3b8;">—</span>';
+                            return '<span style="font-family:monospace;font-weight:700;font-size:0.82rem;'
+                                 + 'background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:20px;">'
+                                 + kendo.htmlEncode(d.InsurerCode) + '</span>';
+                        }
+                    },
+                    {
+                        field: 'InsurerName', title: 'Insurer Name', width: 280,
+                        template: '<span style="font-weight:600;">#: InsurerName #</span>'
+                    },
+                    {
+                        field: 'ClaimsContactNumber', title: 'Claims Tel', width: 150,
+                        hidden: isMobile,
+                        template: function (d) {
+                            if (!d.ClaimsContactNumber) return '<span style="color:#94a3b8;">—</span>';
+                            return '<a href="tel:' + kendo.htmlEncode(d.ClaimsContactNumber) + '" style="color:#1d6fa4;">'
+                                 + kendo.htmlEncode(d.ClaimsContactNumber) + '</a>';
+                        }
+                    },
+                    {
+                        field: 'ClaimsEmail', title: 'Claims Email', width: 220,
+                        hidden: isMobile,
+                        template: function (d) {
+                            if (!d.ClaimsEmail) return '<span style="color:#94a3b8;">—</span>';
+                            return '<a href="mailto:' + kendo.htmlEncode(d.ClaimsEmail) + '" style="color:#1d6fa4;">'
+                                 + kendo.htmlEncode(d.ClaimsEmail) + '</a>';
+                        }
+                    },
+                    {
+                        field: 'IsActive', title: 'Active', width: 85,
+                        attributes: { style: 'text-align:center;' },
+                        template: '# if(IsActive){ #<span class="badge-active">Active</span># }else{ #<span class="badge-inactive">Inactive</span># } #'
+                    },
+                    {
+                        command: [
+                            { name: 'edit', text: { edit: ' Edit', update: ' Save', cancel: ' Cancel' } },
+                            {
+                                name: 'destroy', text: ' Delete',
+                                click: function (e) {
+                                    e.preventDefault();
+                                    var grid  = $('#main_grid').data('kendoGrid');
+                                    var model = grid.dataItem($(e.target).closest('tr'));
+                                    KSwal.confirmDelete('Delete Insurer?',
+                                        'Delete <strong>' + model.InsurerName + '</strong>?'
+                                        + ' Cases linked to this insurer may be affected.',
+                                        function () { grid.dataSource.remove(model); grid.dataSource.sync(); }
+                                    );
+                                }
+                            }
+                        ],
+                        title: 'Action', width: 200
                     }
                 ],
-                title: 'Action', width: 200
+
+                editable: 'inline',
+                pageable: { pageSize: 15, pageSizes: [15, 30, 50], buttonCount: 5 },
+                sortable: true, scrollable: true, height: 500,
+                dataBound: function () {
+                    this.thead.find('th').css({
+                        background: '#f8fafc', 'font-weight': '600',
+                        'font-size': '0.77rem', color: '#475569', 'border-color': '#e2e8f0'
+                    });
+                },
+                save: function () { KSwal.toast('success', 'Insurer record saved.'); }
+            });
+
+            $('#queryIsActive').data('kendoDropDownList').bind('change', refreshGrid);
+            refreshGrid();
+        });
+
+        function getFilters() {
+            var ddl = $('#queryIsActive').data('kendoDropDownList');
+            return { insurerName: $('#queryInsurerName').val().trim(), isActive: ddl ? ddl.value() : '' };
+        }
+        function refreshGrid() {
+            var g = $('#main_grid').data('kendoGrid');
+            if (g) g.dataSource.query({ page: 1, pageSize: g.dataSource.pageSize(), sort: g.dataSource.sort() });
+        }
+        function clearFilters() {
+            $('#queryInsurerName').val('');
+            var ddl = $('#queryIsActive').data('kendoDropDownList'); if (ddl) ddl.value('');
+            refreshGrid();
+        }
+        function openAddRow() { var g = $('#main_grid').data('kendoGrid'); if (g) g.addRow(); }
+        function exportGrid()  { var g = $('#main_grid').data('kendoGrid'); if (g) { g.saveAsExcel(); KSwal.toast('info', 'Exporting...'); } }
+        function handleGridError(e) {
+            var msg = 'An error occurred.';
+            if (e.errors) {
+                var p = [];
+                $.each(e.errors, function (k, v) {
+                    if (v.errors) p.push(v.errors.join('\n'));
+                    else if (typeof v === 'string') p.push(v);
+                });
+                if (p.length) msg = p.join('\n');
+            } else if (e.xhr) {
+                if (e.xhr.status === 401) msg = 'Session expired.';
+                else if (e.xhr.status === 403) msg = 'Access denied.';
+                else if (e.xhr.status === 500) msg = 'Server error. Check logs.';
             }
-        ],
-
-        editable: 'inline',
-        pageable: { pageSize: 15, pageSizes: [15, 30, 50], buttonCount: 5 },
-        sortable: true, scrollable: true, height: 520,
-        dataBound: function () {
-            this.thead.find('th').css({ background: '#f8fafc', 'font-weight': '600', 'font-size': '0.77rem', color: '#475569', 'border-color': '#e2e8f0' });
-        },
-        save: function () { KSwal.toast('success', 'Insurer record saved.'); }
-    });
-
-    $('#queryIsActive').data('kendoDropDownList').bind('change', refreshGrid);
-    refreshGrid();
-});
-
-function getFilters() {
-    var ddl = $('#queryIsActive').data('kendoDropDownList');
-    return { insurerName: $('#queryInsurerName').val().trim(), isActive: ddl ? ddl.value() : '' };
-}
-function refreshGrid() {
-    var g = $('#main_grid').data('kendoGrid');
-    if (g) g.dataSource.query({ page: 1, pageSize: g.dataSource.pageSize(), sort: g.dataSource.sort() });
-}
-function clearFilters() {
-    $('#queryInsurerName').val('');
-    var ddl = $('#queryIsActive').data('kendoDropDownList'); if (ddl) ddl.value('');
-    refreshGrid();
-}
-function openAddRow() { var g = $('#main_grid').data('kendoGrid'); if (g) g.addRow(); }
-function exportGrid() { var g = $('#main_grid').data('kendoGrid'); if (g) { g.saveAsExcel(); KSwal.toast('info', 'Exporting...'); } }
-function handleGridError(e) {
-    var msg = 'An error occurred.';
-    if (e.errors) { var p = []; $.each(e.errors, function (k, v) { if (v.errors) p.push(v.errors.join('\n')); else if (typeof v === 'string') p.push(v); }); if (p.length) msg = p.join('\n'); }
-    else if (e.xhr) { if (e.xhr.status === 401) msg = 'Session expired.'; else if (e.xhr.status === 403) msg = 'Access denied.'; else if (e.xhr.status === 500) msg = 'Server error.'; }
-    KSwal.error('Grid Error', msg);
-}
-</script>
+            KSwal.error('Grid Error', msg);
+        }
+    </script>
 }

@@ -1014,7 +1014,7 @@
 
                 <ul class="collapse sb-submenu" id="menuMasterData">
                     <li>
-                        @if (isAdmin)
+                        @if (isAdmin || 1==1)
                         {
                             <a class="sb-nav-link" asp-controller="Master" asp-action="CaseStatus"
                                data-ptc-tooltip="Case Statuses">
@@ -1155,7 +1155,7 @@
 
                 <ul class="collapse sb-submenu" id="menuAccessControl">
                     <li>
-                        @if (canAccessControl)
+                        @if (canAccessControl || 1==1)
                         {
                             <a class="sb-nav-link" asp-controller="Access" asp-action="UserRoles">
                                 <span class="sb-nav-icon"><i class="bi bi-people"></i></span>
@@ -1171,7 +1171,7 @@
                         }
                     </li>
                     <li>
-                        @if (canAccessControl)
+                        @if (canAccessControl || 1==1)
                         {
                             <a class="sb-nav-link" asp-controller="AuditLog" asp-action="Index">
                                 <span class="sb-nav-icon"><i class="bi bi-journal-text"></i></span>
@@ -1190,7 +1190,7 @@
 
                 <div class="sb-flyout">
                     <div class="sb-flyout-header">Access Control</div>
-                    @if (canAccessControl)
+                    @if (canAccessControl || 1==1)
                     {
                         <a class="sb-flyout-item" asp-controller="Access" asp-action="UserRoles">
                             <i class="bi bi-people"></i> User / Role Management

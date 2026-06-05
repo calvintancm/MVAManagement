@@ -62,6 +62,7 @@ namespace MVAManagement.Data
             builder.Entity<AccidentVehicle>().ToTable("AccidentVehicle");
             builder.Entity<AuditSessionLog>().ToTable("AuditSessionLog");
             builder.Entity<InsurerRegistry>().ToTable("InsurerRegistry");
+            builder.Entity<CourtVenue>().ToTable("CourtVenue");
         }
 
     }

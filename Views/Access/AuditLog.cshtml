@@ -1,0 +1,457 @@
+@{
+    ViewData["Title"] = "Audit Log";
+    ViewData["BreadcrumbSection"] = "Security";
+    ViewData["BreadcrumbPage"] = "Audit Log";
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Session Audit Log</h1>
+        <p class="page-subtitle">Login session history — who logged in, from where, and for how long</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-ptc-outline" onclick="exportGrid()">
+            <i class="bi bi-download"></i> Export
+        </button>
+        <button class="btn-ptc-outline" onclick="purgeOldLogs()">
+            <i class="bi bi-trash"></i> Purge Old (&gt;90d)
+        </button>
+    </div>
+</div>
+
+@* Stats strip — active sessions at a glance *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-body" style="padding:12px 20px;">
+        <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:center;">
+            <div style="text-align:center;">
+                <div id="statActive" style="font-size:1.5rem;font-weight:800;color:#16a34a;">—</div>
+                <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;">Active Sessions</div>
+            </div>
+            <div style="text-align:center;">
+                <div id="statSuspicious" style="font-size:1.5rem;font-weight:800;color:#dc2626;">—</div>
+                <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;">Flagged Today</div>
+            </div>
+            <div style="text-align:center;">
+                <div id="statTotal" style="font-size:1.5rem;font-weight:800;color:#1d6fa4;">—</div>
+                <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;">Total (filtered)</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-body" style="padding:16px 20px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;">
+
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:180px;">
+                <label class="filter-label">Username</label>
+                <input type="text" id="queryUsername" class="k-textbox"
+                       style="width:180px;" placeholder="Search username..." />
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:130px;">
+                <label class="filter-label">Session Status</label>
+                <select id="queryIsActive" style="width:130px;"></select>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:140px;">
+                <label class="filter-label">Suspicious</label>
+                <select id="queryIsSuspicious" style="width:140px;"></select>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:130px;">
+                <label class="filter-label">Login From</label>
+                <input type="text" id="queryDateFrom" style="width:130px;" />
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:130px;">
+                <label class="filter-label">Login To</label>
+                <input type="text" id="queryDateTo" style="width:130px;" />
+            </div>
+
+            <div style="display:flex;gap:8px;padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="refreshGrid()">
+                    <i class="bi bi-search"></i> Search
+                </button>
+                <button class="btn-ptc-outline" onclick="clearFilters()">
+                    <i class="bi bi-x-circle"></i> Clear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Grid Card *@
+<div class="ptc-card">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title">
+            <i class="bi bi-journal-text"></i> Session Log
+        </h2>
+        <span id="recordCount" class="record-count-badge">0 records</span>
+    </div>
+    <div class="ptc-card-body" style="padding:0;">
+        <div id="main_grid"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+var token    = $('input[name="__RequestVerificationToken"]').val();
+var isMobile = window.innerWidth <= 576;
+
+$(function () {
+    kendo.culture('en-GB');
+
+    $('#queryIsActive').kendoDropDownList({
+        dataTextField: 'text', dataValueField: 'value',
+        dataSource: [
+            { text: 'All',      value: '' },
+            { text: 'Active',   value: 'true' },
+            { text: 'Ended',    value: 'false' }
+        ],
+        value: ''
+    });
+
+    $('#queryIsSuspicious').kendoDropDownList({
+        dataTextField: 'text', dataValueField: 'value',
+        dataSource: [
+            { text: 'All',        value: '' },
+            { text: 'Flagged',    value: 'true' },
+            { text: 'Not Flagged',value: 'false' }
+        ],
+        value: ''
+    });
+
+    $('#queryDateFrom').kendoDatePicker({ format: 'dd/MM/yyyy', placeholder: 'From date' });
+    $('#queryDateTo').kendoDatePicker({   format: 'dd/MM/yyyy', placeholder: 'To date'   });
+
+    $('#queryUsername').on('keypress', function (e) {
+        if (e.which === 13) refreshGrid();
+    });
+
+    /* ══════════════════════════════════════════════════════════════
+       KENDO GRID — Session Audit Log (read-only + terminate action)
+    ══════════════════════════════════════════════════════════════ */
+    $('#main_grid').kendoGrid({
+        dataSource: {
+            transport: {
+                read: {
+                    url:  '@Url.Action("AuditLogRead", "Access")',
+                    type: 'POST'
+                },
+                parameterMap: function (data, operation) {
+                    if (operation === 'read')
+                        return $.extend({}, data, getFilters(), { __RequestVerificationToken: token });
+                    return data;
+                }
+            },
+            schema: {
+                data: 'Data', total: 'Total', errors: 'Errors',
+                model: {
+                    id: 'Id',
+                    fields: {
+                        Id:                    { type: 'number',  editable: false },
+                        UserId:                { type: 'string',  editable: false },
+                        Username:              { type: 'string',  editable: false },
+                        SessionId:             { type: 'string',  editable: false },
+                        IpAddress:             { type: 'string',  editable: false },
+                        ComputerName:          { type: 'string',  editable: false },
+                        UserAgent:             { type: 'string',  editable: false },
+                        LoginTime:             { type: 'string',  editable: false },
+                        LogoutTime:            { type: 'string',  editable: false },
+                        SessionDurationMinutes:{ type: 'number',  editable: false },
+                        IsActive:              { type: 'boolean', editable: false },
+                        LogoutReason:          { type: 'string',  editable: false },
+                        IsFlaggedSuspicious:   { type: 'boolean', editable: false },
+                        SuspicionReason:       { type: 'string',  editable: false }
+                    }
+                }
+            },
+            pageSize: 20, serverPaging: true, serverSorting: true,
+            sort: { field: 'LoginTime', dir: 'desc' },
+            requestEnd: function (e) {
+                if (e.type === 'read' && e.response) {
+                    var t = e.response.Total || 0;
+                    $('#recordCount').text(t + ' record' + (t !== 1 ? 's' : ''));
+                    $('#statTotal').text(t);
+                }
+            },
+            error: function (e) { handleGridError(e); }
+        },
+
+        columns: [
+            { field: 'Id', hidden: true },
+            { field: 'UserId', hidden: true },
+            { field: 'SessionId', hidden: true },
+
+            /* ── Login Time ── */
+            {
+                field: 'LoginTime', title: 'Login Time', width: 155,
+                template: function (d) {
+                    if (!d.LoginTime) return '—';
+                    return '<span style="font-family:monospace;font-size:0.82rem;font-weight:600;">'
+                         + kendo.htmlEncode(d.LoginTime) + '</span>';
+                }
+            },
+
+            /* ── Username ── */
+            {
+                field: 'Username', title: 'Username', width: 150,
+                template: function (d) {
+                    var flag = d.IsFlaggedSuspicious
+                        ? ' <i class="bi bi-exclamation-triangle-fill" style="color:#dc2626;font-size:12px;" title="' + kendo.htmlEncode(d.SuspicionReason || 'Flagged suspicious') + '"></i>'
+                        : '';
+                    return '<span style="font-weight:600;">' + kendo.htmlEncode(d.Username || '') + '</span>' + flag;
+                }
+            },
+
+            /* ── Session Status ── */
+            {
+                field: 'IsActive', title: 'Status', width: 100,
+                attributes: { style: 'text-align:center;' },
+                template: function (d) {
+                    if (d.IsActive)
+                        return '<span class="badge-active" style="display:inline-flex;align-items:center;gap:4px;">'
+                             + '<span style="width:6px;height:6px;border-radius:50%;background:#16a34a;'
+                             + 'animation:pulse-dot 1.5s ease-in-out infinite;flex-shrink:0;"></span>Active</span>';
+                    return '<span class="badge-inactive">Ended</span>';
+                }
+            },
+
+            /* ── IP Address ── */
+            {
+                field: 'IpAddress', title: 'IP Address', width: 130, hidden: isMobile,
+                template: function (d) {
+                    if (!d.IpAddress) return '<span style="color:#94a3b8;">—</span>';
+                    return '<code style="font-size:0.8rem;">' + kendo.htmlEncode(d.IpAddress) + '</code>';
+                }
+            },
+
+            /* ── Computer Name ── */
+            {
+                field: 'ComputerName', title: 'Computer', width: 130, hidden: isMobile,
+                template: '#= ComputerName || "-" #'
+            },
+
+            /* ── Session Duration ── */
+            {
+                field: 'SessionDurationMinutes', title: 'Duration', width: 100,
+                attributes: { style: 'text-align:center;' },
+                template: function (d) {
+                    if (d.IsActive)
+                        return '<span style="color:#16a34a;font-size:0.8rem;font-style:italic;">Ongoing</span>';
+                    if (d.SessionDurationMinutes === null || d.SessionDurationMinutes === undefined)
+                        return '<span style="color:#94a3b8;">—</span>';
+                    var mins = d.SessionDurationMinutes;
+                    var txt  = mins < 60
+                        ? mins + ' min'
+                        : Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm';
+                    return '<span style="font-size:0.82rem;">' + txt + '</span>';
+                }
+            },
+
+            /* ── Logout Time ── */
+            {
+                field: 'LogoutTime', title: 'Logout Time', width: 155, hidden: isMobile,
+                template: function (d) {
+                    if (!d.LogoutTime) return '<span style="color:#94a3b8;">—</span>';
+                    return '<span style="font-family:monospace;font-size:0.8rem;">'
+                         + kendo.htmlEncode(d.LogoutTime) + '</span>';
+                }
+            },
+
+            /* ── Logout Reason ── */
+            {
+                field: 'LogoutReason', title: 'End Reason', width: 150, hidden: isMobile,
+                template: function (d) {
+                    if (!d.LogoutReason) return '<span style="color:#94a3b8;">—</span>';
+                    var colors = {
+                        'User Logout':        { bg:'#dcfce7', color:'#166534' },
+                        'Session Timeout':    { bg:'#fef3c7', color:'#92400e' },
+                        'Forced Termination': { bg:'#fee2e2', color:'#991b1b' },
+                        'System Restart':     { bg:'#f3e8ff', color:'#6b21a8' }
+                    };
+                    var s = colors[d.LogoutReason] || { bg:'#f1f5f9', color:'#475569' };
+                    return '<span style="background:' + s.bg + ';color:' + s.color + ';'
+                         + 'padding:2px 9px;border-radius:20px;font-size:0.72rem;font-weight:600;">'
+                         + kendo.htmlEncode(d.LogoutReason) + '</span>';
+                }
+            },
+
+            /* ── User Agent (truncated) ── */
+            {
+                field: 'UserAgent', title: 'Browser / OS', width: 200, hidden: true,
+                template: function (d) {
+                    if (!d.UserAgent) return '—';
+                    var short = d.UserAgent.length > 60
+                        ? d.UserAgent.substring(0, 60) + '…'
+                        : d.UserAgent;
+                    return '<span title="' + kendo.htmlEncode(d.UserAgent) + '" style="font-size:0.78rem;color:#64748b;">'
+                         + kendo.htmlEncode(short) + '</span>';
+                }
+            },
+
+            /* ── Suspicious flag ── */
+            {
+                field: 'IsFlaggedSuspicious', title: 'Flagged', width: 80,
+                attributes: { style: 'text-align:center;' },
+                template: function (d) {
+                    if (!d.IsFlaggedSuspicious) return '<span style="color:#94a3b8;font-size:13px;">—</span>';
+                    return '<i class="bi bi-exclamation-triangle-fill" style="color:#dc2626;font-size:15px;" '
+                         + 'title="' + kendo.htmlEncode(d.SuspicionReason || '') + '"></i>';
+                }
+            },
+
+            /* ── Action: Terminate active session ── */
+            {
+                title: 'Action', width: 130,
+                template: function (d) {
+                    if (!d.IsActive) return '';
+                    return '<button class="btn-grid-action btn-lock" '
+                         + 'onclick="terminateSession(' + d.Id + ', \'' + kendo.htmlEncode(d.Username) + '\')">'
+                         + '<i class="bi bi-x-circle"></i> Terminate</button>';
+                }
+            }
+        ],
+
+        editable:  false,
+        pageable:  { pageSize: 20, pageSizes: [20, 50, 100, 200], buttonCount: 5 },
+        sortable:  true,
+        scrollable:true,
+        height:    580,
+        dataBound: function () {
+            this.thead.find('th').css({
+                background: '#f8fafc', 'font-weight': '600',
+                'font-size': '0.77rem', color: '#475569', 'border-color': '#e2e8f0'
+            });
+            // Update active session count in stats strip
+            var activeCount = 0;
+            var suspCount   = 0;
+            var today       = new Date().toDateString();
+            this.dataSource.data().forEach(function (d) {
+                if (d.IsActive) activeCount++;
+                if (d.IsFlaggedSuspicious) {
+                    var loginDate = d.LoginTime ? new Date(d.LoginTime).toDateString() : '';
+                    if (loginDate === today) suspCount++;
+                }
+            });
+            $('#statActive').text(activeCount);
+            $('#statSuspicious').text(suspCount);
+        }
+    });
+
+    $('#queryIsActive').data('kendoDropDownList').bind('change', refreshGrid);
+    $('#queryIsSuspicious').data('kendoDropDownList').bind('change', refreshGrid);
+    refreshGrid();
+});
+
+/* ── Terminate session ── */
+function terminateSession(sessionId, username) {
+    KSwal.confirm(
+        'Terminate Session?',
+        'Force logout <strong>' + username + '</strong>? '
+        + 'Their active session will be ended immediately.',
+        function () {
+            $.post('@Url.Action("TerminateSession", "Access")', {
+                sessionId: sessionId,
+                __RequestVerificationToken: token
+            })
+            .done(function (res) {
+                if (res && res.Errors && res.Errors.error) {
+                    KSwal.error('Failed', res.Errors.error.errors[0]);
+                } else {
+                    KSwal.toast('success', 'Session terminated.');
+                    refreshGrid();
+                }
+            })
+            .fail(function () { KSwal.error('Error', 'Server error.'); });
+        }
+    );
+}
+
+/* ── Purge old logs ── */
+function purgeOldLogs() {
+    KSwal.confirm(
+        'Purge Old Sessions?',
+        'Delete all <strong>ended</strong> session records older than 90 days? This cannot be undone.',
+        function () {
+            $.post('@Url.Action("PurgeOldLogs", "Access")',
+                   { __RequestVerificationToken: token })
+            .done(function (res) {
+                var count = res.Data && res.Data[0] ? res.Data[0].purged : '?';
+                KSwal.toast('success', count + ' old session(s) purged.');
+                refreshGrid();
+            })
+            .fail(function () { KSwal.error('Error', 'Failed to purge logs.'); });
+        }
+    );
+}
+
+/* ── Filters ── */
+function getFilters() {
+    var ddlActive = $('#queryIsActive').data('kendoDropDownList');
+    var ddlSusp   = $('#queryIsSuspicious').data('kendoDropDownList');
+    var dpFrom    = $('#queryDateFrom').data('kendoDatePicker');
+    var dpTo      = $('#queryDateTo').data('kendoDatePicker');
+    return {
+        username:     $('#queryUsername').val().trim(),
+        isActive:     ddlActive ? ddlActive.value() : '',
+        isSuspicious: ddlSusp   ? ddlSusp.value()   : '',
+        dateFrom:     dpFrom && dpFrom.value() ? kendo.toString(dpFrom.value(), 'yyyy-MM-dd') : '',
+        dateTo:       dpTo   && dpTo.value()   ? kendo.toString(dpTo.value(),   'yyyy-MM-dd') : ''
+    };
+}
+function refreshGrid() {
+    var g = $('#main_grid').data('kendoGrid');
+    if (g) g.dataSource.query({ page: 1, pageSize: g.dataSource.pageSize(), sort: g.dataSource.sort() });
+}
+function clearFilters() {
+    $('#queryUsername').val('');
+    var da = $('#queryIsActive').data('kendoDropDownList');    if (da) da.value('');
+    var ds = $('#queryIsSuspicious').data('kendoDropDownList');if (ds) ds.value('');
+    var df = $('#queryDateFrom').data('kendoDatePicker');      if (df) df.value(null);
+    var dt = $('#queryDateTo').data('kendoDatePicker');        if (dt) dt.value(null);
+    refreshGrid();
+}
+function exportGrid() {
+    var g = $('#main_grid').data('kendoGrid');
+    if (g) { g.saveAsExcel(); KSwal.toast('info', 'Exporting session log...'); }
+}
+function handleGridError(e) {
+    var msg = 'An error occurred.';
+    if (e.errors) {
+        var p = [];
+        $.each(e.errors, function (k, v) {
+            if (v.errors) p.push(v.errors.join('\n'));
+            else if (typeof v === 'string') p.push(v);
+        });
+        if (p.length) msg = p.join('\n');
+    } else if (e.xhr) {
+        if (e.xhr.status === 401) msg = 'Session expired.';
+        else if (e.xhr.status === 403) msg = 'Access denied.';
+        else if (e.xhr.status === 500) msg = 'Server error. Check logs.';
+    }
+    KSwal.error('Grid Error', msg);
+}
+</script>
+
+<style>
+/* Pulsing dot for active sessions */
+@@keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1);    }
+    50%       { opacity: 0.4; transform: scale(0.7); }
+}
+.btn-grid-action {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border-radius: 6px;
+    font-size: 0.72rem; font-weight: 600;
+    border: 1px solid; cursor: pointer;
+    transition: opacity 0.15s;
+}
+.btn-grid-action:hover { opacity: 0.8; }
+.btn-lock { background:#fee2e2; color:#dc2626; border-color:#fecaca; }
+</style>
+}

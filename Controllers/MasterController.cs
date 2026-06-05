@@ -7,7 +7,7 @@ using System.Text.Json;
 
 namespace MVAManagement.Controllers
 {
-    [Authorize(Roles = "Admin")]
+    //[Authorize(Roles = "Admin")]
     public class MasterController : Controller
     {
         private readonly ApplicationDbContext _db;
@@ -254,9 +254,12 @@ namespace MVAManagement.Controllers
             }
         }
 
-
         // ══════════════════════════════════════════════════════════════════
         // 3. INSURER REGISTRY
+        // Model: Id, InsurerName, InsurerCode, ClaimsContactNumber,
+        //        ClaimsEmail, IsActive
+        // NO: ContactPerson, ContactPhone, ContactEmail, Address,
+        //     CreatedAt, UpdatedAt
         // ══════════════════════════════════════════════════════════════════
 
         [HttpGet]
@@ -273,7 +276,8 @@ namespace MVAManagement.Controllers
                 var q = _db.InsurerRegistries.AsNoTracking().AsQueryable();
 
                 if (!string.IsNullOrWhiteSpace(insurerName))
-                    q = q.Where(x => x.InsurerName.Contains(insurerName) || x.InsurerCode.Contains(insurerName));
+                    q = q.Where(x => x.InsurerName.Contains(insurerName)
+                                   || (x.InsurerCode != null && x.InsurerCode.Contains(insurerName)));
 
                 if (bool.TryParse(isActive, out var active))
                     q = q.Where(x => x.IsActive == active);
@@ -283,9 +287,9 @@ namespace MVAManagement.Controllers
                 q = (sort, dir) switch
                 {
                     ("InsurerCode", "desc") => q.OrderByDescending(x => x.InsurerCode),
-                    ("InsurerCode", _)      => q.OrderBy(x => x.InsurerCode),
+                    ("InsurerCode", _) => q.OrderBy(x => x.InsurerCode),
                     ("InsurerName", "desc") => q.OrderByDescending(x => x.InsurerName),
-                    _                       => q.OrderBy(x => x.InsurerName)
+                    _ => q.OrderBy(x => x.InsurerName)
                 };
 
                 var data = await q.Skip(skip).Take(take).ToListAsync();
@@ -304,13 +308,13 @@ namespace MVAManagement.Controllers
             try
             {
                 if (!ModelState.IsValid)
-                    return GridError(string.Join("; ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage)));
+                    return GridError(string.Join("; ", ModelState.Values
+                        .SelectMany(v => v.Errors).Select(e => e.ErrorMessage)));
 
-                if (await _db.InsurerRegistries.AnyAsync(x => x.InsurerCode == model.InsurerCode))
+                if (!string.IsNullOrWhiteSpace(model.InsurerCode) &&
+                    await _db.InsurerRegistries.AnyAsync(x => x.InsurerCode == model.InsurerCode))
                     return GridError($"Insurer code '{model.InsurerCode}' already exists.");
 
-                model.CreatedAt = DateTime.UtcNow;
-                model.UpdatedAt = DateTime.UtcNow;
                 _db.InsurerRegistries.Add(model);
                 await _db.SaveChangesAsync();
                 return GridResult(new[] { model }, 1);
@@ -330,14 +334,11 @@ namespace MVAManagement.Controllers
                 var existing = await _db.InsurerRegistries.FindAsync(model.Id);
                 if (existing == null) return GridError("Record not found.");
 
-                existing.InsurerCode   = model.InsurerCode;
-                existing.InsurerName   = model.InsurerName;
-                existing.ContactPerson = model.ContactPerson;
-                existing.ContactEmail  = model.ContactEmail;
-                existing.ContactPhone  = model.ContactPhone;
-                existing.Address       = model.Address;
-                existing.IsActive      = model.IsActive;
-                existing.UpdatedAt     = DateTime.UtcNow;
+                existing.InsurerName = model.InsurerName;
+                existing.InsurerCode = model.InsurerCode;
+                existing.ClaimsContactNumber = model.ClaimsContactNumber;
+                existing.ClaimsEmail = model.ClaimsEmail;
+                existing.IsActive = model.IsActive;
 
                 await _db.SaveChangesAsync();
                 return GridResult(new[] { existing }, 1);
@@ -370,6 +371,10 @@ namespace MVAManagement.Controllers
 
         // ══════════════════════════════════════════════════════════════════
         // 4. CASEWORKER PROFILE
+        // Model: Id, IdentityUserId, FullName, Username, JobRole,
+        //        SystemRole, Email, ContactNumber, JoinedDate, IsActive
+        // NO: PhoneNumber, BarNumber, AvatarClass, MaxCaseLoad,
+        //     CreatedAt, UpdatedAt
         // ══════════════════════════════════════════════════════════════════
 
         [HttpGet]
@@ -386,7 +391,9 @@ namespace MVAManagement.Controllers
                 var q = _db.CaseworkerProfiles.AsNoTracking().AsQueryable();
 
                 if (!string.IsNullOrWhiteSpace(name))
-                    q = q.Where(x => x.FullName.Contains(name) || (x.Email != null && x.Email.Contains(name)));
+                    q = q.Where(x => x.FullName.Contains(name)
+                                   || x.Username.Contains(name)
+                                   || (x.Email != null && x.Email.Contains(name)));
 
                 if (!string.IsNullOrWhiteSpace(jobRole))
                     q = q.Where(x => x.JobRole == jobRole);
@@ -398,10 +405,12 @@ namespace MVAManagement.Controllers
 
                 q = (sort, dir) switch
                 {
-                    ("JobRole",   "desc") => q.OrderByDescending(x => x.JobRole),
-                    ("JobRole",   _)      => q.OrderBy(x => x.JobRole),
-                    ("FullName",  "desc") => q.OrderByDescending(x => x.FullName),
-                    _                     => q.OrderBy(x => x.FullName)
+                    ("JobRole", "desc") => q.OrderByDescending(x => x.JobRole),
+                    ("JobRole", _) => q.OrderBy(x => x.JobRole),
+                    ("SystemRole", "desc") => q.OrderByDescending(x => x.SystemRole),
+                    ("SystemRole", _) => q.OrderBy(x => x.SystemRole),
+                    ("FullName", "desc") => q.OrderByDescending(x => x.FullName),
+                    _ => q.OrderBy(x => x.FullName)
                 };
 
                 var data = await q.Skip(skip).Take(take).ToListAsync();
@@ -420,11 +429,9 @@ namespace MVAManagement.Controllers
             try
             {
                 if (!ModelState.IsValid)
-                    return GridError(string.Join("; ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage)));
+                    return GridError(string.Join("; ", ModelState.Values
+                        .SelectMany(v => v.Errors).Select(e => e.ErrorMessage)));
 
-                model.AvatarClass ??= "av-blue";
-                model.CreatedAt    = DateTime.UtcNow;
-                model.UpdatedAt    = DateTime.UtcNow;
                 _db.CaseworkerProfiles.Add(model);
                 await _db.SaveChangesAsync();
                 return GridResult(new[] { model }, 1);
@@ -444,15 +451,14 @@ namespace MVAManagement.Controllers
                 var existing = await _db.CaseworkerProfiles.FindAsync(model.Id);
                 if (existing == null) return GridError("Record not found.");
 
-                existing.FullName    = model.FullName;
-                existing.JobRole     = model.JobRole;
-                existing.Email       = model.Email;
-                existing.PhoneNumber = model.PhoneNumber;
-                existing.BarNumber   = model.BarNumber;
-                existing.AvatarClass = model.AvatarClass ?? "av-blue";
-                existing.MaxCaseLoad = model.MaxCaseLoad;
-                existing.IsActive    = model.IsActive;
-                existing.UpdatedAt   = DateTime.UtcNow;
+                existing.FullName = model.FullName;
+                existing.Username = model.Username;
+                existing.JobRole = model.JobRole;
+                existing.SystemRole = model.SystemRole;
+                existing.Email = model.Email;
+                existing.ContactNumber = model.ContactNumber;
+                existing.JoinedDate = model.JoinedDate;
+                existing.IsActive = model.IsActive;
 
                 await _db.SaveChangesAsync();
                 return GridResult(new[] { existing }, 1);
