@@ -185,6 +185,53 @@ var app = builder.Build();
 //    }
 //}
 
+// Place this block AFTER var app = builder.Build();
+// and BEFORE app.UseHttpsRedirection();
+// ═══════════════════════════════════════════════════════════════
+
+using (var scope = app.Services.CreateScope())
+{
+    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+
+    // ── Ensure all required roles exist ──────────────────────────
+    var requiredRoles = new[] { "Admin", "Solicitor", "Caseworker", "Finance" };
+    foreach (var roleName in requiredRoles)
+    {
+        if (!await roleManager.RoleExistsAsync(roleName))
+        {
+            await roleManager.CreateAsync(new IdentityRole(roleName));
+            Console.WriteLine($"[Seed] Role '{roleName}' created.");
+        }
+    }
+
+    // ── Assign Admin role to your user ────────────────────────────
+    // CHANGE THIS to your actual username or email
+    var adminUsername = "tancm.mi";   // ← replace with your username
+
+    var adminUser = await userManager.FindByNameAsync(adminUsername)
+                 ?? await userManager.FindByEmailAsync(adminUsername);
+
+    if (adminUser != null)
+    {
+        if (!await userManager.IsInRoleAsync(adminUser, "Admin"))
+        {
+            await userManager.AddToRoleAsync(adminUser, "Admin");
+            Console.WriteLine($"[Seed] Admin role assigned to '{adminUser.UserName}'.");
+        }
+        else
+        {
+            Console.WriteLine($"[Seed] '{adminUser.UserName}' already has Admin role.");
+        }
+    }
+    else
+    {
+        Console.WriteLine($"[Seed] WARNING: User '{adminUsername}' not found. Check username.");
+    }
+}
+
+
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");

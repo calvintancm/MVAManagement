@@ -9,7 +9,7 @@
 <div class="page-header">
     <div>
         <h1 class="page-title">User / Role Management</h1>
-        <p class="page-subtitle">Manage system users and their access roles</p>
+        <p class="page-subtitle">Assign roles to registered users and manage account access</p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn-ptc-outline" onclick="exportGrid()">
@@ -19,15 +19,14 @@
 </div>
 
 @* Info Banner *@
-<div class="ptc-card mb-3" style="border-left:4px solid #dc2626;">
+<div class="ptc-card mb-3" style="border-left:4px solid #1d6fa4;">
     <div class="ptc-card-body" style="padding:14px 20px;">
         <div style="display:flex;align-items:flex-start;gap:12px;">
-            <i class="bi bi-shield-lock-fill" style="color:#dc2626;font-size:18px;margin-top:2px;flex-shrink:0;"></i>
+            <i class="bi bi-info-circle-fill" style="color:#1d6fa4;font-size:18px;margin-top:2px;flex-shrink:0;"></i>
             <div style="font-size:0.8rem;color:var(--text-muted);line-height:1.6;">
-                Users are managed via ASP.NET Identity (<strong>AspNetUsers</strong>).
-                Assign roles by clicking <strong>Edit</strong> on a row — enter comma-separated role names
-                (e.g. <code>Admin</code>, <code>Solicitor</code>, <code>Caseworker</code>, <code>Finance</code>).
-                Use <strong>Lock</strong> to disable login without deleting the account.
+                All registered users appear here automatically. Click <strong>Edit</strong> on any row
+                to assign roles (comma-separated). Use <strong>Lock</strong> to disable login without
+                deleting the account. Use <strong>Pwd</strong> to reset a user's password.
             </div>
         </div>
     </div>
@@ -37,13 +36,13 @@
 <div class="ptc-card mb-3">
     <div class="ptc-card-body" style="padding:12px 20px;">
         <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
-            <span style="font-size:0.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-right:4px;">Roles:</span>
+            <span class="filter-label" style="margin-right:4px;">Available Roles:</span>
             <span class="role-badge role-admin">Admin</span>
             <span class="role-badge role-solicitor">Solicitor</span>
             <span class="role-badge role-caseworker">Caseworker</span>
             <span class="role-badge role-finance">Finance</span>
-            <span style="font-size:0.75rem;color:var(--text-muted);margin-left:8px;">
-                — Enter exact role names when editing. Multiple roles: comma-separated.
+            <span style="font-size:0.75rem;color:var(--text-muted);margin-left:6px;">
+                — Enter comma-separated role names when editing. E.g. <code>Solicitor, Finance</code>
             </span>
         </div>
     </div>
@@ -86,7 +85,7 @@
 <div class="ptc-card">
     <div class="ptc-card-header">
         <h2 class="ptc-card-title">
-            <i class="bi bi-people"></i> System Users
+            <i class="bi bi-people"></i> Registered Users
         </h2>
         <span id="recordCount" class="record-count-badge">0 records</span>
     </div>
@@ -95,322 +94,581 @@
     </div>
 </div>
 
+@* ── RESET PASSWORD MODAL ─────────────────────────────────────────── *@
+<div id="modalResetPwd" style="display:none;position:fixed;inset:0;z-index:9999;
+     background:rgba(0,0,0,0.55);align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:14px;width:100%;max-width:420px;
+                box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;">
+
+        <div style="background:linear-gradient(135deg,#f59e0b,#fbbf24);
+                    padding:18px 24px;display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <div style="font-weight:700;font-size:1rem;color:#1a0800;">
+                    <i class="bi bi-key-fill"></i>&nbsp; Reset Password
+                </div>
+                <div id="resetPwdSubtitle" style="font-size:0.78rem;color:rgba(0,0,0,0.5);margin-top:2px;"></div>
+            </div>
+            <button onclick="closeResetPwd()"
+                    style="background:none;border:none;font-size:20px;cursor:pointer;opacity:0.7;">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+
+        <div style="padding:24px;">
+            <input type="hidden" id="resetUserId" />
+
+            <div class="modal-field-group">
+                <label class="modal-label">New Password <span style="color:#dc2626;">*</span></label>
+                <div style="position:relative;">
+                    <input type="password" id="resetPassword" class="k-textbox modal-input"
+                           placeholder="Min 6 characters" style="padding-right:40px;" />
+                    <button type="button" onclick="togglePwd('resetPassword','eyeReset')"
+                            style="position:absolute;right:10px;top:50%;transform:translateY(-50%);
+                                   background:none;border:none;cursor:pointer;color:#64748b;font-size:15px;">
+                        <i class="bi bi-eye" id="eyeReset"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="modal-field-group">
+                <label class="modal-label">Confirm Password <span style="color:#dc2626;">*</span></label>
+                <div style="position:relative;">
+                    <input type="password" id="resetConfirm" class="k-textbox modal-input"
+                           placeholder="Re-enter password" style="padding-right:40px;" />
+                    <button type="button" onclick="togglePwd('resetConfirm','eyeConfirm')"
+                            style="position:absolute;right:10px;top:50%;transform:translateY(-50%);
+                                   background:none;border:none;cursor:pointer;color:#64748b;font-size:15px;">
+                        <i class="bi bi-eye" id="eyeConfirm"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div id="resetPwdError"
+                 style="display:none;background:#fee2e2;border:1px solid #fecaca;
+                        border-left:3px solid #dc2626;border-radius:8px;
+                        padding:10px 14px;margin-top:12px;font-size:0.82rem;color:#991b1b;">
+            </div>
+        </div>
+
+        <div style="padding:0 24px 20px;display:flex;gap:10px;justify-content:flex-end;">
+            <button class="btn-ptc-outline" onclick="closeResetPwd()">Cancel</button>
+            <button style="background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#1a0800;
+                           border:none;border-radius:8px;padding:9px 20px;font-weight:700;
+                           font-size:0.88rem;cursor:pointer;display:inline-flex;align-items:center;gap:6px;"
+                    onclick="saveResetPwd()">
+                <i class="bi bi-key-fill"></i> Reset Password
+            </button>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
-<script>
-var token = $('input[name="__RequestVerificationToken"]').val();
-var isMobile = window.innerWidth <= 576;
+    <script>
+        var token    = $('input[name="__RequestVerificationToken"]').val();
+        var isMobile = window.innerWidth <= 576;
 
-$(function () {
-    kendo.culture('en-GB');
+        $(function () {
+            kendo.culture('en-GB');
 
-    $('#queryIsActive').kendoDropDownList({
-        dataTextField: 'text', dataValueField: 'value',
-        dataSource: [
-            { text: 'All',      value: '' },
-            { text: 'Active',   value: 'true' },
-            { text: 'Locked',   value: 'false' }
-        ],
-        value: ''
-    });
+            $('#queryIsActive').kendoDropDownList({
+                dataTextField: 'text', dataValueField: 'value',
+                dataSource: [
+                    { text: 'All',    value: '' },
+                    { text: 'Active', value: 'true' },
+                    { text: 'Locked', value: 'false' }
+                ],
+                value: ''
+            });
 
-    $('#queryRole').kendoDropDownList({
-        dataTextField: 'text', dataValueField: 'value',
-        dataSource: [
-            { text: 'All Roles',  value: '' },
-            { text: 'Admin',      value: 'Admin' },
-            { text: 'Solicitor',  value: 'Solicitor' },
-            { text: 'Caseworker', value: 'Caseworker' },
-            { text: 'Finance',    value: 'Finance' }
-        ],
-        value: ''
-    });
+            $('#queryRole').kendoDropDownList({
+                dataTextField: 'text', dataValueField: 'value',
+                dataSource: [
+                    { text: 'All Roles',  value: '' },
+                    { text: 'Admin',      value: 'Admin' },
+                    { text: 'Solicitor',  value: 'Solicitor' },
+                    { text: 'Caseworker', value: 'Caseworker' },
+                    { text: 'Finance',    value: 'Finance' }
+                ],
+                value: ''
+            });
 
-    $('#queryUserName').on('keypress', function (e) {
-        if (e.which === 13) refreshGrid();
-    });
+            $('#queryUserName').on('keypress', function (e) {
+                if (e.which === 13) refreshGrid();
+            });
 
-    /* ══════════════════════════════════════════════════════════════
-       KENDO GRID — Users
-    ══════════════════════════════════════════════════════════════ */
-    $('#main_grid').kendoGrid({
-        dataSource: {
-            transport: {
-                read: {
-                    url:  '@Url.Action("UserRolesRead", "Access")',
-                    type: 'POST'
+            /* ══════════════════════════════════════════════════════════════
+               KENDO GRID — All registered users, assign roles inline
+            ══════════════════════════════════════════════════════════════ */
+            $('#main_grid').kendoGrid({
+                dataSource: {
+                    transport: {
+                        read: {
+                            url:  '@Url.Action("UserRolesRead", "Access")',
+                            type: 'POST'
+                        },
+                        parameterMap: function (data, operation) {
+                            if (operation === 'read')
+                                return $.extend({}, data, getFilters(), { __RequestVerificationToken: token });
+                            return $.extend({}, data, { __RequestVerificationToken: token });
+                        }
+                    },
+                    schema: {
+                        data: 'Data', total: 'Total', errors: 'Errors',
+                        model: {
+                            id: 'Id',
+                            fields: {
+                                Id:                { type: 'string',  editable: false },
+                                UserName:          { type: 'string',  editable: false },
+                                Email:             { type: 'string',  editable: false },
+                                PhoneNumber:       { type: 'string',  editable: false },
+                                Roles:             { type: 'string'  },  // ← only editable field
+                                EmailConfirmed:    { type: 'boolean', editable: false },
+                                TwoFactorEnabled:  { type: 'boolean', editable: false },
+                                AccessFailedCount: { type: 'number',  editable: false },
+                                IsLocked:          { type: 'boolean', editable: false },
+                                LockoutEnd:        { type: 'string',  editable: false },
+                                LastLoginAt:       { type: 'string',  editable: false }
+                            }
+                        }
+                    },
+                    pageSize: 20, serverPaging: true, serverSorting: true,
+                    sort: { field: 'UserName', dir: 'asc' },
+                    requestEnd: function (e) {
+                        if (e.type === 'read' && e.response) {
+                            var t = e.response.Total || 0;
+                            $('#recordCount').text(t + ' record' + (t !== 1 ? 's' : ''));
+                        }
+                    },
+                    error: function (e) { handleGridError(e); }
                 },
-                parameterMap: function (data, operation) {
-                    if (operation === 'read')
-                        return $.extend({}, data, getFilters(), { __RequestVerificationToken: token });
-                    return $.extend({}, data, { __RequestVerificationToken: token });
-                }
-            },
-            schema: {
-                data: 'Data', total: 'Total', errors: 'Errors',
-                model: {
-                    id: 'Id',
-                    fields: {
-                        Id:                 { type: 'string',  editable: false },
-                        UserName:           { type: 'string',  editable: false },
-                        Email:              { type: 'string',  editable: false },
-                        PhoneNumber:        { type: 'string',  editable: false },
-                        Roles:              { type: 'string'  },  // editable — comma-separated
-                        EmailConfirmed:     { type: 'boolean', editable: false },
-                        TwoFactorEnabled:   { type: 'boolean', editable: false },
-                        AccessFailedCount:  { type: 'number',  editable: false },
-                        IsLocked:           { type: 'boolean', editable: false },
-                        LockoutEnd:         { type: 'string',  editable: false },
-                        LastLoginAt:        { type: 'string',  editable: false }
+
+                columns: [
+                    { field: 'Id', hidden: true },
+                    {
+                        field: 'UserName', title: 'Username', width: 180,
+                        template: function (d) {
+                            var lock = d.IsLocked
+                                ? ' <i class="bi bi-lock-fill" style="color:#dc2626;font-size:12px;" title="Account locked"></i>'
+                                : '';
+                            return '<span style="font-weight:600;">'
+                                 + kendo.htmlEncode(d.UserName || '') + '</span>' + lock;
+                        }
+                    },
+                    {
+                        field: 'Email', title: 'Email', width: 220, hidden: isMobile,
+                        template: function (d) {
+                            if (!d.Email) return '<span style="color:#94a3b8;">—</span>';
+                            var icon = d.EmailConfirmed
+                                ? '<i class="bi bi-patch-check-fill" style="color:#16a34a;font-size:11px;margin-left:4px;" title="Verified"></i>'
+                                : '<i class="bi bi-exclamation-circle" style="color:#f59e0b;font-size:11px;margin-left:4px;" title="Not verified"></i>';
+                            return '<span style="font-size:0.85rem;">' + kendo.htmlEncode(d.Email) + '</span>' + icon;
+                        }
+                    },
+                    {
+                        field: 'PhoneNumber', title: 'Phone', width: 130, hidden: isMobile,
+                        template: '#= PhoneNumber || "-" #'
+                    },
+                    {
+                        // Roles — the ONLY editable column via inline edit
+                        field: 'Roles', title: 'Roles', width: 230,
+                        template: function (d) {
+                            if (!d.Roles)
+                                return '<span style="color:#94a3b8;font-size:0.8rem;font-style:italic;">No role assigned</span>';
+                            var html = '';
+                            d.Roles.split(',').forEach(function (r) {
+                                r = r.trim(); if (!r) return;
+                                html += '<span class="role-badge role-' + r.toLowerCase() + '">'
+                                      + kendo.htmlEncode(r) + '</span> ';
+                            });
+                            return html;
+                        }
+                    },
+                    {
+                        field: 'LastLoginAt', title: 'Last Login', width: 150, hidden: isMobile,
+                        template: function (d) {
+                            if (!d.LastLoginAt) return '<span style="color:#94a3b8;">Never</span>';
+                            return '<span style="font-size:0.85rem;">' + kendo.htmlEncode(d.LastLoginAt) + '</span>';
+                        }
+                    },
+                    {
+                        field: 'AccessFailedCount', title: 'Failed', width: 70,
+                        attributes: { style: 'text-align:center;' },
+                        template: function (d) {
+                            if (!d.AccessFailedCount)
+                                return '<span style="color:#94a3b8;">0</span>';
+                            return '<span style="color:#dc2626;font-weight:700;">' + d.AccessFailedCount + '</span>';
+                        }
+                    },
+                    {
+                        // Quick action buttons — Lock, Reset failed count, Reset password, Delete
+                        title: 'Actions', width: 230,
+                        template: function (d) {
+                            var lockBtn = d.IsLocked
+                                ? '<button class="btn-grid-action btn-unlock" '
+                                  + 'onclick="toggleLock(\'' + d.Id + '\', false)">'
+                                  + '<i class="bi bi-unlock"></i> Unlock</button>'
+                                : '<button class="btn-grid-action btn-lock" '
+                                  + 'onclick="toggleLock(\'' + d.Id + '\', true)">'
+                                  + '<i class="bi bi-lock"></i> Lock</button>';
+
+                            var resetBtn = d.AccessFailedCount > 0
+                                ? '<button class="btn-grid-action btn-reset" title="Reset failed count" '
+                                  + 'onclick="resetFailed(\'' + d.Id + '\')">'
+                                  + '<i class="bi bi-arrow-counterclockwise"></i></button>'
+                                : '';
+
+                            var pwdBtn = '<button class="btn-grid-action btn-pwd" '
+                                + 'onclick="openResetPwd(\'' + d.Id + '\',\''
+                                + kendo.htmlEncode(d.UserName) + '\')">'
+                                + '<i class="bi bi-key"></i> Pwd</button>';
+
+                            var delBtn = '<button class="btn-grid-action btn-del" title="Delete user" '
+                                + 'onclick="deleteUser(\'' + d.Id + '\',\''
+                                + kendo.htmlEncode(d.UserName) + '\')">'
+                                + '<i class="bi bi-trash"></i></button>';
+
+                            return '<div style="display:flex;gap:4px;flex-wrap:wrap;">'
+                                 + lockBtn + resetBtn + pwdBtn + delBtn + '</div>';
+                        }
+                    },
+                    {
+                        // Edit Roles inline
+                        command: [{
+                            name: 'edit',
+                            text: { edit: ' Edit Roles', update: ' Save', cancel: ' Cancel' }
+                        }],
+                        title: '', width: 165
                     }
-                }
-            },
-            pageSize: 20, serverPaging: true, serverSorting: true,
-            sort: { field: 'UserName', dir: 'asc' },
-            requestEnd: function (e) {
-                if (e.type === 'read' && e.response) {
-                    var t = e.response.Total || 0;
-                    $('#recordCount').text(t + ' record' + (t !== 1 ? 's' : ''));
-                }
-            },
-            error: function (e) { handleGridError(e); }
-        },
+                ],
 
-        columns: [
-            { field: 'Id', hidden: true },
-            {
-                // Username + lock indicator
-                field: 'UserName', title: 'Username', width: 180,
-                template: function (d) {
-                    var lockIcon = d.IsLocked
-                        ? ' <i class="bi bi-lock-fill" style="color:#dc2626;font-size:12px;" title="Account locked"></i>'
-                        : '';
-                    return '<span style="font-weight:600;">' + kendo.htmlEncode(d.UserName || '') + '</span>' + lockIcon;
-                }
-            },
-            {
-                field: 'Email', title: 'Email', width: 210, hidden: isMobile,
-                template: function (d) {
-                    if (!d.Email) return '<span style="color:#94a3b8;">—</span>';
-                    var confirmed = d.EmailConfirmed
-                        ? '<i class="bi bi-patch-check-fill" style="color:#16a34a;font-size:12px;margin-left:4px;" title="Confirmed"></i>'
-                        : '<i class="bi bi-exclamation-circle" style="color:#f59e0b;font-size:12px;margin-left:4px;" title="Not confirmed"></i>';
-                    return '<span style="font-size:0.85rem;">' + kendo.htmlEncode(d.Email) + '</span>' + confirmed;
-                }
-            },
-            {
-                // Roles — the only editable column
-                field: 'Roles', title: 'Roles', width: 220,
-                template: function (d) {
-                    if (!d.Roles) return '<span style="color:#94a3b8;font-size:0.8rem;">No roles</span>';
-                    var html = '';
-                    d.Roles.split(',').forEach(function (r) {
-                        r = r.trim();
-                        if (!r) return;
-                        var cls = 'role-' + r.toLowerCase();
-                        html += '<span class="role-badge ' + cls + '">' + kendo.htmlEncode(r) + '</span> ';
+                editable: 'inline',
+
+                // Only Roles is editable — intercept save and POST to AssignRoles
+                save: function (e) {
+                    e.preventDefault();
+                    var grid  = $('#main_grid').data('kendoGrid');
+                    var model = e.model;
+
+                    $.post('@Url.Action("AssignRoles", "Access")', {
+                        userId: model.Id,
+                        roles:  model.Roles || '',
+                        __RequestVerificationToken: token
+                    })
+                    .done(function (res) {
+                        if (res && res.Errors && res.Errors.error) {
+                            KSwal.error('Save Failed', res.Errors.error.errors[0]);
+                        } else {
+                            KSwal.toast('success', 'Roles saved successfully.');
+                            grid.cancelRow();
+                            grid.dataSource.read();
+                        }
+                    })
+                    .fail(function () {
+                        KSwal.error('Error', 'Failed to save roles. Check server logs.');
                     });
-                    return html;
-                }
-            },
-            {
-                field: 'LastLoginAt', title: 'Last Login', width: 140, hidden: isMobile,
-                template: '#= LastLoginAt || "-" #'
-            },
-            {
-                field: 'AccessFailedCount', title: 'Failed', width: 70,
-                attributes: { style: 'text-align:center;' },
-                template: function (d) {
-                    if (!d.AccessFailedCount) return '<span style="color:#94a3b8;">0</span>';
-                    return '<span style="color:#dc2626;font-weight:700;">' + d.AccessFailedCount + '</span>';
-                }
-            },
-            {
-                field: 'TwoFactorEnabled', title: '2FA', width: 60,
-                attributes: { style: 'text-align:center;' },
-                template: '# if(TwoFactorEnabled){ #<i class="bi bi-shield-check" style="color:#16a34a;"></i># }else{ #<i class="bi bi-shield" style="color:#94a3b8;"></i># } #'
-            },
-            {
-                // Custom action column — lock/unlock + reset + edit
-                title: 'Actions', width: 260,
-                template: function (d) {
-                    var lockBtn = d.IsLocked
-                        ? '<button class="btn-grid-action btn-unlock" onclick="toggleLock(\'' + d.Id + '\', false)" title="Unlock account">'
-                          + '<i class="bi bi-unlock"></i> Unlock</button>'
-                        : '<button class="btn-grid-action btn-lock" onclick="toggleLock(\'' + d.Id + '\', true)" title="Lock account">'
-                          + '<i class="bi bi-lock"></i> Lock</button>';
+                },
 
-                    var resetBtn = d.AccessFailedCount > 0
-                        ? '<button class="btn-grid-action btn-reset" onclick="resetFailed(\'' + d.Id + '\')" title="Reset failed login count">'
-                          + '<i class="bi bi-arrow-counterclockwise"></i> Reset</button>'
-                        : '';
-
-                    return '<div style="display:flex;gap:5px;flex-wrap:wrap;">'
-                         + lockBtn + resetBtn
-                         + '</div>';
+                pageable: { pageSize: 20, pageSizes: [20, 50, 100], buttonCount: 5 },
+                sortable: true, scrollable: true, height: 580,
+                dataBound: function () {
+                    this.thead.find('th').css({
+                        background: '#f8fafc', 'font-weight': '600',
+                        'font-size': '0.77rem', color: '#475569', 'border-color': '#e2e8f0'
+                    });
                 }
-            },
-            {
-                command: [{
-                    name: 'edit',
-                    text: { edit: ' Edit Roles', update: ' Save', cancel: ' Cancel' }
-                }],
-                title: '', width: 170
+            });
+
+            $('#queryIsActive').data('kendoDropDownList').bind('change', refreshGrid);
+            $('#queryRole').data('kendoDropDownList').bind('change', refreshGrid);
+            refreshGrid();
+        });
+
+        /* ══════════════════════════════════════════════════════════════════
+           RESET PASSWORD MODAL
+        ══════════════════════════════════════════════════════════════════ */
+        function openResetPwd(userId, userName) {
+            $('#resetUserId').val(userId);
+            $('#resetPwdSubtitle').text('User: ' + userName);
+            $('#resetPassword, #resetConfirm').val('');
+            $('#resetPwdError').hide().text('');
+            // Reset eye icons
+            document.getElementById('eyeReset').className   = 'bi bi-eye';
+            document.getElementById('eyeConfirm').className = 'bi bi-eye';
+            document.getElementById('resetPassword').type   = 'password';
+            document.getElementById('resetConfirm').type    = 'password';
+            $('#modalResetPwd').css('display', 'flex');
+            setTimeout(function () { $('#resetPassword').focus(); }, 120);
+        }
+
+        function closeResetPwd() {
+            $('#modalResetPwd').hide();
+        }
+
+        function saveResetPwd() {
+            var pwd     = $('#resetPassword').val();
+            var confirm = $('#resetConfirm').val();
+
+            if (!pwd || pwd.length < 6) {
+                showModalError('resetPwdError', 'Password must be at least 6 characters.');
+                return;
             }
-        ],
+            if (pwd !== confirm) {
+                showModalError('resetPwdError', 'Passwords do not match.');
+                return;
+            }
 
-        // Only Roles field is editable — inline
-        editable: 'inline',
-
-        // Override save to POST to AssignRoles endpoint
-        save: function (e) {
-            e.preventDefault();
-            var grid  = $('#main_grid').data('kendoGrid');
-            var model = e.model;
-
-            $.post('@Url.Action("AssignRoles", "Access")', {
-                userId: model.Id,
-                roles:  model.Roles || '',
+            $.post('@Url.Action("ResetPassword", "Access")', {
+                userId:      $('#resetUserId').val(),
+                newPassword: pwd,
                 __RequestVerificationToken: token
             })
             .done(function (res) {
-                if (res && res.Errors) {
-                    var msg = '';
-                    $.each(res.Errors, function (k, v) {
-                        if (v.errors) msg += v.errors.join('\n');
-                    });
-                    KSwal.error('Save failed', msg || 'Unknown error');
+                if (res && res.Errors && res.Errors.error) {
+                    showModalError('resetPwdError', res.Errors.error.errors[0]);
                 } else {
-                    KSwal.toast('success', 'Roles updated successfully.');
-                    grid.cancelRow();
-                    grid.dataSource.read();
+                    closeResetPwd();
+                    KSwal.toast('success', 'Password reset successfully.');
                 }
             })
             .fail(function () {
-                KSwal.error('Error', 'Failed to save roles. Check server logs.');
-            });
-        },
-
-        pageable: { pageSize: 20, pageSizes: [20, 50, 100], buttonCount: 5 },
-        sortable: true, scrollable: true, height: 560,
-        dataBound: function () {
-            this.thead.find('th').css({
-                background: '#f8fafc', 'font-weight': '600',
-                'font-size': '0.77rem', color: '#475569', 'border-color': '#e2e8f0'
+                showModalError('resetPwdError', 'Server error. Please try again.');
             });
         }
-    });
 
-    $('#queryIsActive').data('kendoDropDownList').bind('change', refreshGrid);
-    $('#queryRole').data('kendoDropDownList').bind('change', refreshGrid);
-    refreshGrid();
-});
+        /* ══════════════════════════════════════════════════════════════════
+           LOCK / UNLOCK
+        ══════════════════════════════════════════════════════════════════ */
+        function toggleLock(userId, lockUser) {
+            KSwal.confirm(
+                lockUser ? 'Lock Account?' : 'Unlock Account?',
+                lockUser
+                    ? 'This user will not be able to log in until unlocked.'
+                    : 'Restore login access for this user?',
+                function () {
+                    $.post('@Url.Action("ToggleLock", "Access")', {
+                        userId: userId, lockUser: lockUser,
+                        __RequestVerificationToken: token
+                    })
+                    .done(function (res) {
+                        if (res && res.Errors && res.Errors.error) {
+                            KSwal.error('Failed', res.Errors.error.errors[0]);
+                        } else {
+                            KSwal.toast('success', lockUser ? 'Account locked.' : 'Account unlocked.');
+                            refreshGrid();
+                        }
+                    })
+                    .fail(function () { KSwal.error('Error', 'Server error.'); });
+                }
+            );
+        }
 
-/* ── Actions ── */
-function toggleLock(userId, lockUser) {
-    var msg = lockUser
-        ? 'Lock this account? The user will not be able to log in.'
-        : 'Unlock this account?';
-
-    KSwal.confirm(lockUser ? 'Lock Account?' : 'Unlock Account?', msg, function () {
-        $.post('@Url.Action("ToggleLock", "Access")', {
-            userId: userId, lockUser: lockUser,
-            __RequestVerificationToken: token
-        })
-        .done(function (res) {
-            if (res && res.Errors) {
-                var e = res.Errors;
-                KSwal.error('Failed', e.error ? e.error.errors[0] : 'Unknown error');
-            } else {
-                KSwal.toast('success', lockUser ? 'Account locked.' : 'Account unlocked.');
+        /* ══════════════════════════════════════════════════════════════════
+           RESET FAILED COUNT
+        ══════════════════════════════════════════════════════════════════ */
+        function resetFailed(userId) {
+            $.post('@Url.Action("ResetFailedCount", "Access")', {
+                userId: userId, __RequestVerificationToken: token
+            })
+            .done(function () {
+                KSwal.toast('success', 'Failed count reset.');
                 refreshGrid();
+            })
+            .fail(function () { KSwal.error('Error', 'Server error.'); });
+        }
+
+        /* ══════════════════════════════════════════════════════════════════
+           DELETE USER
+        ══════════════════════════════════════════════════════════════════ */
+        function deleteUser(userId, userName) {
+            KSwal.confirmDelete(
+                'Delete User?',
+                'Permanently delete <strong>' + userName + '</strong>? '
+                + 'This cannot be undone.',
+                function () {
+                    $.post('@Url.Action("UserDelete", "Access")', {
+                        userId: userId,
+                        __RequestVerificationToken: token
+                    })
+                    .done(function (res) {
+                        if (res && res.Errors && res.Errors.error) {
+                            KSwal.error('Failed', res.Errors.error.errors[0]);
+                        } else {
+                            KSwal.toast('success', 'User deleted.');
+                            refreshGrid();
+                        }
+                    })
+                    .fail(function () { KSwal.error('Error', 'Server error.'); });
+                }
+            );
+        }
+
+        /* ══════════════════════════════════════════════════════════════════
+           HELPERS
+        ══════════════════════════════════════════════════════════════════ */
+        function togglePwd(inputId, iconId) {
+            var inp  = document.getElementById(inputId);
+            var icon = document.getElementById(iconId);
+            if (inp.type === 'password') {
+                inp.type = 'text';
+                icon.className = 'bi bi-eye-slash';
+            } else {
+                inp.type = 'password';
+                icon.className = 'bi bi-eye';
             }
-        })
-        .fail(function () { KSwal.error('Error', 'Server error.'); });
-    });
-}
+        }
 
-function resetFailed(userId) {
-    KSwal.confirm('Reset Failed Count?',
-        'Reset the access-failed login counter for this user?', function () {
-        $.post('@Url.Action("ResetFailedCount", "Access")', {
-            userId: userId,
-            __RequestVerificationToken: token
-        })
-        .done(function () {
-            KSwal.toast('success', 'Failed count reset.');
+        function showModalError(divId, msg) {
+            $('#' + divId).text(msg).show();
+        }
+
+        function getFilters() {
+            var ddlActive = $('#queryIsActive').data('kendoDropDownList');
+            var ddlRole   = $('#queryRole').data('kendoDropDownList');
+            return {
+                userName: $('#queryUserName').val().trim(),
+                role:     ddlRole   ? ddlRole.value()   : '',
+                isActive: ddlActive ? ddlActive.value() : ''
+            };
+        }
+
+        function refreshGrid() {
+            var g = $('#main_grid').data('kendoGrid');
+            if (g) g.dataSource.query({
+                page:     1,
+                pageSize: g.dataSource.pageSize(),
+                sort:     g.dataSource.sort()
+            });
+        }
+
+        function clearFilters() {
+            $('#queryUserName').val('');
+            var da = $('#queryIsActive').data('kendoDropDownList'); if (da) da.value('');
+            var dr = $('#queryRole').data('kendoDropDownList');     if (dr) dr.value('');
             refreshGrid();
-        })
-        .fail(function () { KSwal.error('Error', 'Server error.'); });
-    });
-}
+        }
 
-function getFilters() {
-    var ddlActive = $('#queryIsActive').data('kendoDropDownList');
-    var ddlRole   = $('#queryRole').data('kendoDropDownList');
-    return {
-        userName: $('#queryUserName').val().trim(),
-        role:     ddlRole   ? ddlRole.value()   : '',
-        isActive: ddlActive ? ddlActive.value() : ''
-    };
-}
-function refreshGrid() {
-    var g = $('#main_grid').data('kendoGrid');
-    if (g) g.dataSource.query({ page: 1, pageSize: g.dataSource.pageSize(), sort: g.dataSource.sort() });
-}
-function clearFilters() {
-    $('#queryUserName').val('');
-    var da = $('#queryIsActive').data('kendoDropDownList'); if (da) da.value('');
-    var dr = $('#queryRole').data('kendoDropDownList');     if (dr) dr.value('');
-    refreshGrid();
-}
-function exportGrid() {
-    var g = $('#main_grid').data('kendoGrid');
-    if (g) { g.saveAsExcel(); KSwal.toast('info', 'Exporting...'); }
-}
-function handleGridError(e) {
-    var msg = 'An error occurred.';
-    if (e.errors) {
-        var p = [];
-        $.each(e.errors, function (k, v) {
-            if (v.errors) p.push(v.errors.join('\n'));
-            else if (typeof v === 'string') p.push(v);
+        function exportGrid() {
+            var g = $('#main_grid').data('kendoGrid');
+            if (g) { g.saveAsExcel(); KSwal.toast('info', 'Exporting...'); }
+        }
+
+        function handleGridError(e) {
+            var msg = 'An error occurred.';
+            if (e.errors) {
+                var p = [];
+                $.each(e.errors, function (k, v) {
+                    if (v.errors) p.push(v.errors.join('\n'));
+                    else if (typeof v === 'string') p.push(v);
+                });
+                if (p.length) msg = p.join('\n');
+            } else if (e.xhr) {
+                if (e.xhr.status === 401)      msg = 'Session expired. Please log in again.';
+                else if (e.xhr.status === 403) msg = 'Access denied.';
+                else if (e.xhr.status === 500) msg = 'Server error. Check logs.';
+            }
+            KSwal.error('Grid Error', msg);
+        }
+
+        // Close modal on backdrop click
+        document.getElementById('modalResetPwd').addEventListener('click', function (e) {
+            if (e.target === this) closeResetPwd();
         });
-        if (p.length) msg = p.join('\n');
-    } else if (e.xhr) {
-        if (e.xhr.status === 401) msg = 'Session expired.';
-        else if (e.xhr.status === 403) msg = 'Access denied.';
-        else if (e.xhr.status === 500) msg = 'Server error. Check logs.';
-    }
-    KSwal.error('Grid Error', msg);
-}
-</script>
+    </script>
 
-<style>
-/* Role badges */
-.role-badge {
-    display: inline-block;
-    padding: 2px 10px;
-    border-radius: 20px;
-    font-size: 0.7rem;
-    font-weight: 700;
-    margin-right: 3px;
-}
-.role-admin      { background:#fee2e2; color:#991b1b; }
-.role-solicitor  { background:#dbeafe; color:#1e40af; }
-.role-caseworker { background:#dcfce7; color:#166534; }
-.role-finance    { background:#fef3c7; color:#92400e; }
+    <style>
+        .role-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            margin-right: 3px;
+        }
 
-/* Grid action buttons */
-.btn-grid-action {
-    display: inline-flex; align-items: center; gap: 4px;
-    padding: 3px 10px; border-radius: 6px;
-    font-size: 0.72rem; font-weight: 600;
-    border: 1px solid; cursor: pointer;
-    transition: opacity 0.15s;
-}
-.btn-grid-action:hover { opacity: 0.8; }
-.btn-lock   { background:#fee2e2; color:#dc2626; border-color:#fecaca; }
-.btn-unlock { background:#dcfce7; color:#16a34a; border-color:#bbf7d0; }
-.btn-reset  { background:#fef3c7; color:#92400e; border-color:#fde68a; }
-</style>
+        .role-admin {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .role-solicitor {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .role-caseworker {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .role-finance {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .btn-grid-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 9px;
+            border-radius: 6px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            border: 1px solid;
+            cursor: pointer;
+            transition: opacity 0.15s;
+            background: none;
+        }
+
+            .btn-grid-action:hover {
+                opacity: 0.75;
+            }
+
+        .btn-lock {
+            background: #fee2e2;
+            color: #dc2626;
+            border-color: #fecaca;
+        }
+
+        .btn-unlock {
+            background: #dcfce7;
+            color: #16a34a;
+            border-color: #bbf7d0;
+        }
+
+        .btn-reset {
+            background: #fef3c7;
+            color: #92400e;
+            border-color: #fde68a;
+        }
+
+        .btn-pwd {
+            background: #dbeafe;
+            color: #1e40af;
+            border-color: #bfdbfe;
+        }
+
+        .btn-del {
+            background: #f1f5f9;
+            color: #dc2626;
+            border-color: #e2e8f0;
+        }
+
+        .modal-field-group {
+            margin-bottom: 16px;
+        }
+
+        .modal-label {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #475569;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 6px;
+        }
+
+        .modal-input {
+            width: 100% !important;
+        }
+    </style>
 }

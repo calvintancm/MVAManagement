@@ -207,10 +207,17 @@ public async Task<IActionResult> Logout()
         // ─────────────────────────────────────────────────────────────────
         // GET /Account/AccessDenied
         // ─────────────────────────────────────────────────────────────────
+        //[HttpGet]
+        //public IActionResult AccessDenied()
+        //{
+        //    return View();
+        //}
+
         [HttpGet]
-        public IActionResult AccessDenied()
+        public IActionResult AccessDenied(string returnUrl = null)
         {
-            return View();
+            TempData["ErrorMessage"] = "Access denied. You do not have permission to view that page.";
+            return RedirectToAction("Login", "Account");
         }
 
         // ─────────────────────────────────────────────────────────────────
