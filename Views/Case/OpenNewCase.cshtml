@@ -1,0 +1,411 @@
+@model MVAManagement.Models.MVA.CaseFile
+@{
+    var isEdit = Model.Id > 0;
+    ViewData["Title"] = isEdit ? "Edit Case File" : "Open New Case";
+    ViewData["BreadcrumbSection"] = "Case Management";
+    ViewData["BreadcrumbPage"] = isEdit ? "Edit Case" : "Open New Case";
+
+    var caseStatuses  = ViewBag.CaseStatuses  as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var caseworkers   = ViewBag.Caseworkers   as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var hearingStages = ViewBag.HearingStages as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+
+    string formAction = isEdit
+        ? Url.Action("CaseUpdate", "Case")
+        : Url.Action("CaseCreate", "Case");
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">@(isEdit ? "Edit Case File" : "Open New Case")</h1>
+        <p class="page-subtitle">@(isEdit ? $"Editing {Model.FileNumber}" : "Register a new MVA legal case file")</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="@Url.Action("AllCases","Case")" class="btn-ptc-outline">
+            <i class="bi bi-arrow-left"></i> Back to All Cases
+        </a>
+    </div>
+</div>
+
+@* Alerts *@
+@if (TempData["Error"] != null)
+{
+    <div class="ptc-alert-danger mb-3"><i class="bi bi-exclamation-triangle-fill"></i> @TempData["Error"]</div>
+}
+
+<form method="post" action="@formAction" id="caseForm" autocomplete="off">
+    @Html.AntiForgeryToken()
+    @if (isEdit)
+    {
+        <input type="hidden" name="Id" value="@Model.Id" />
+        <input type="hidden" name="FileNumber" value="@Model.FileNumber" />
+        <input type="hidden" name="CreatedAt" value="@Model.CreatedAt.ToString("o")" />
+    }
+
+    @* ── SECTION 1: File Identification ──────────────────────────────── *@
+    <div class="ptc-card mb-3">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-folder2"></i> File Identification</h2>
+        </div>
+        <div class="ptc-card-body" style="padding:20px 24px;">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">File Number <span class="text-danger">*</span></label>
+                    @if (isEdit)
+                    {
+                        <div class="k-textbox" style="background:#f8fafc;font-family:monospace;font-weight:700;color:#1d6fa4;">@Model.FileNumber</div>
+                        <input type="hidden" name="FileNumber" value="@Model.FileNumber" />
+                    }
+                    else
+                    {
+                        <input type="text" name="FileNumber" class="k-textbox w-100"
+                               value="@(ViewBag.SuggestedFileNumber ?? "")" required
+                               placeholder="e.g. PTC/MVA/2025/0001" />
+                    }
+                    <small class="text-muted">Format: FIRM/MVA/YYYY/NNNN</small>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Court Case Number</label>
+                    <input type="text" name="CourtCaseNumber" class="k-textbox w-100"
+                           value="@Model.CourtCaseNumber" placeholder="Assigned by court after filing" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Solicitor File Reference</label>
+                    <input type="text" name="SolicitorFileReference" class="k-textbox w-100"
+                           value="@Model.SolicitorFileReference" placeholder="Internal ref if different" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── SECTION 2: Primary Claimant ──────────────────────────────────── *@
+    <div class="ptc-card mb-3">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-person-vcard"></i> Primary Claimant</h2>
+        </div>
+        <div class="ptc-card-body" style="padding:20px 24px;">
+            <div class="row g-3">
+                <div class="col-md-5">
+                    <label class="form-label fw-semibold">Full Legal Name <span class="text-danger">*</span></label>
+                    <input type="text" name="PrimaryClaimantName" class="k-textbox w-100"
+                           value="@Model.PrimaryClaimantName" required placeholder="As per MyKad / Passport" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Secondary Claimant</label>
+                    <input type="text" name="SecondaryClaimantName" class="k-textbox w-100"
+                           value="@Model.SecondaryClaimantName" placeholder="Spouse, dependant, etc." />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Gender</label>
+                    <select name="Gender" id="ddlGender" style="width:100%;"></select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Date of Birth</label>
+                    <input type="text" name="DateOfBirth" id="dtDob" class="k-textbox w-100"
+                           value="@(Model.DateOfBirth.HasValue ? Model.DateOfBirth.Value.ToString("dd/MM/yyyy") : "")"
+                           placeholder="dd/MM/yyyy" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">National ID (MyKad / Passport)</label>
+                    <input type="text" name="NationalId" class="k-textbox w-100"
+                           value="@Model.NationalId" placeholder="e.g. 900101-14-1234" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Telephone</label>
+                    <input type="text" name="TelephoneNumber" class="k-textbox w-100"
+                           value="@Model.TelephoneNumber" placeholder="03-XXXX XXXX" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Mobile</label>
+                    <input type="text" name="MobileNumber" class="k-textbox w-100"
+                           value="@Model.MobileNumber" placeholder="01X-XXXXXXX" />
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label fw-semibold">Full Address</label>
+                    <textarea name="FullAddress" class="k-textbox w-100" rows="2"
+                              placeholder="Residential or correspondence address">@Model.FullAddress</textarea>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Referral Source</label>
+                    <input type="text" name="ReferralSource" class="k-textbox w-100"
+                           value="@Model.ReferralSource" placeholder="e.g. Walk-in, Agent, Dr. Ahmad" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── SECTION 3: Accident Parameters ──────────────────────────────── *@
+    <div class="ptc-card mb-3">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-car-front-fill"></i> Accident Parameters</h2>
+        </div>
+        <div class="ptc-card-body" style="padding:20px 24px;">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Accident Date</label>
+                    <input type="text" name="AccidentDate" id="dtAccident" class="k-textbox w-100"
+                           value="@(Model.AccidentDate.HasValue ? Model.AccidentDate.Value.ToString("dd/MM/yyyy") : "")"
+                           placeholder="dd/MM/yyyy" />
+                    @if (Model.StatuteOfLimitationsDeadline.HasValue)
+                    {
+                        var expired = Model.IsLimitationExpired;
+                        <small class="@(expired ? "text-danger fw-bold" : "text-muted")">
+                            <i class="bi bi-exclamation-triangle-fill"></i>
+                            Limitation: @Model.StatuteOfLimitationsDeadline.Value.ToString("dd/MM/yyyy")
+                            @(expired ? " — EXPIRED" : "")
+                        </small>
+                    }
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Client Vehicle Role</label>
+                    <select name="ClientVehicleRole" id="ddlVehicleRole" style="width:100%;"></select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Assigned Caseworker</label>
+                    <select name="AssignedCaseworkerId" id="ddlCaseworker" style="width:100%;"></select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── SECTION 4: Financial Ledger ──────────────────────────────────── *@
+    <div class="ptc-card mb-3">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-currency-exchange"></i> Financial Ledger (MYR)</h2>
+        </div>
+        <div class="ptc-card-body" style="padding:20px 24px;">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Claimed Amount</label>
+                    <div class="input-group">
+                        <span class="input-group-text" style="font-size:13px;background:#f8fafc;border-color:#e2e8f0;">RM</span>
+                        <input type="number" name="ClaimedAmount" class="k-textbox"
+                               style="border-left:none;flex:1;"
+                               value="@Model.ClaimedAmount.ToString("F2")" step="0.01" min="0" placeholder="0.00" />
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Min. Settlement Target</label>
+                    <div class="input-group">
+                        <span class="input-group-text" style="font-size:13px;background:#f8fafc;border-color:#e2e8f0;">RM</span>
+                        <input type="number" name="MinimumSettlementTarget" class="k-textbox"
+                               style="border-left:none;flex:1;"
+                               value="@Model.MinimumSettlementTarget.ToString("F2")" step="0.01" min="0" placeholder="0.00" />
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Current Offer</label>
+                    <div class="input-group">
+                        <span class="input-group-text" style="font-size:13px;background:#f8fafc;border-color:#e2e8f0;">RM</span>
+                        <input type="number" name="CurrentOffer" class="k-textbox"
+                               style="border-left:none;flex:1;"
+                               value="@Model.CurrentOffer.ToString("F2")" step="0.01" min="0" placeholder="0.00" />
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Total Disbursements</label>
+                    <div class="input-group">
+                        <span class="input-group-text" style="font-size:13px;background:#f8fafc;border-color:#e2e8f0;">RM</span>
+                        <input type="number" name="TotalDisbursementAmount" class="k-textbox"
+                               style="border-left:none;flex:1;"
+                               value="@Model.TotalDisbursementAmount.ToString("F2")" step="0.01" min="0" placeholder="0.00" />
+                    </div>
+                    <small class="text-muted">Auto-calculated from disbursement records</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── SECTION 5: Status & Litigation ──────────────────────────────── *@
+    <div class="ptc-card mb-3">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-bank2"></i> Status &amp; Litigation</h2>
+        </div>
+        <div class="ptc-card-body" style="padding:20px 24px;">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Case Status</label>
+                    <select name="CaseStatusId" id="ddlCaseStatus" style="width:100%;"></select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Current Hearing Stage</label>
+                    <select name="CurrentHearingStageId" id="ddlHearingStage" style="width:100%;"></select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Next Hearing Date</label>
+                    <input type="text" name="NextHearingDate" id="dtNextHearing" class="k-textbox w-100"
+                           value="@(Model.NextHearingDate.HasValue ? Model.NextHearingDate.Value.ToString("dd/MM/yyyy") : "")"
+                           placeholder="dd/MM/yyyy" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Case Closed Date</label>
+                    <input type="text" name="CaseClosedDate" id="dtCaseClosed" class="k-textbox w-100"
+                           value="@(Model.CaseClosedDate.HasValue ? Model.CaseClosedDate.Value.ToString("dd/MM/yyyy") : "")"
+                           placeholder="dd/MM/yyyy" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Summons Drafted</label>
+                    <input type="text" name="SummonsDraftedDate" id="dtSummonsDraft" class="k-textbox w-100"
+                           value="@(Model.SummonsDraftedDate.HasValue ? Model.SummonsDraftedDate.Value.ToString("dd/MM/yyyy") : "")"
+                           placeholder="dd/MM/yyyy" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Summons Sealed</label>
+                    <input type="text" name="SummonsSealedDate" id="dtSummonsSealed" class="k-textbox w-100"
+                           value="@(Model.SummonsSealedDate.HasValue ? Model.SummonsSealedDate.Value.ToString("dd/MM/yyyy") : "")"
+                           placeholder="dd/MM/yyyy" />
+                </div>
+                <div class="col-md-6" style="display:flex;gap:28px;align-items:center;padding-top:24px;">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                        <input type="checkbox" name="IsInLitigation" id="chkLitigation" value="true"
+                               @(Model.IsInLitigation ? "checked" : "")
+                               style="width:16px;height:16px;" />
+                        <input type="hidden" name="IsInLitigation" value="false" />
+                        <span class="fw-semibold" style="font-size:0.88rem;">In Litigation</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                        <input type="checkbox" name="IsActive" id="chkActive" value="true"
+                               @(Model.IsActive ? "checked" : "")
+                               style="width:16px;height:16px;" />
+                        <input type="hidden" name="IsActive" value="false" />
+                        <span class="fw-semibold" style="font-size:0.88rem;">Active</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                        <input type="checkbox" name="IsClosed" id="chkClosed" value="true"
+                               @(Model.IsClosed ? "checked" : "")
+                               style="width:16px;height:16px;" />
+                        <input type="hidden" name="IsClosed" value="false" />
+                        <span class="fw-semibold" style="font-size:0.88rem;">Closed</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── SECTION 6: Remarks ───────────────────────────────────────────── *@
+    <div class="ptc-card mb-4">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-chat-square-text"></i> Remarks</h2>
+        </div>
+        <div class="ptc-card-body" style="padding:20px 24px;">
+            <textarea name="Remarks" class="k-textbox w-100" rows="3"
+                      placeholder="General remarks visible to all caseworkers...">@Model.Remarks</textarea>
+        </div>
+    </div>
+
+    @* ── Submit Bar ───────────────────────────────────────────────────── *@
+    <div style="display:flex;align-items:center;gap:12px;justify-content:flex-end;padding-bottom:24px;">
+        <a href="@Url.Action("AllCases","Case")" class="btn-ptc-outline">
+            <i class="bi bi-x-circle"></i> Cancel
+        </a>
+        <button type="submit" class="btn-ptc-primary" id="btnSubmit">
+            <i class="bi @(isEdit ? "bi-floppy2" : "bi-folder-plus")"></i>
+            @(isEdit ? "Save Changes" : "Open Case File")
+        </button>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+var allCaseStatuses  = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.CaseStatuses));
+var allCaseworkers   = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.Caseworkers));
+var allHearingStages = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.HearingStages));
+
+$(function () {
+    kendo.culture('en-GB');
+
+    // ── Gender dropdown ───────────────────────────────────────────────
+    $('#ddlGender').kendoDropDownList({
+        dataSource: ['Male', 'Female'],
+        optionLabel: '— Select —',
+        value: '@Html.Raw(Model.Gender ?? "")'
+    });
+
+    // ── Vehicle role dropdown ─────────────────────────────────────────
+    $('#ddlVehicleRole').kendoDropDownList({
+        dataSource: ['Driver','Pillion Rider','Passenger','Pedestrian','Cyclist'],
+        value: '@Html.Raw(Model.ClientVehicleRole ?? "Driver")'
+    });
+
+    // ── Caseworker dropdown ───────────────────────────────────────────
+    var cwSource = (allCaseworkers || []).map(function(c){
+        return { text: c.FullName + ' (' + c.JobRole + ')', value: c.Id };
+    });
+    $('#ddlCaseworker').kendoDropDownList({
+        dataTextField: 'text', dataValueField: 'value',
+        dataSource: cwSource, optionLabel: '— Unassigned —',
+        value: @(Model.AssignedCaseworkerId.HasValue ? Model.AssignedCaseworkerId.Value.ToString() : "null")
+    });
+
+    // ── Case Status dropdown ──────────────────────────────────────────
+    var statusSource = (allCaseStatuses || []).map(function(s){
+        return { text: s.StatusCode ? s.StatusName + ' (' + s.StatusCode + ')' : s.StatusName, value: s.Id };
+    });
+    $('#ddlCaseStatus').kendoDropDownList({
+        dataTextField: 'text', dataValueField: 'value',
+        dataSource: statusSource, optionLabel: '— Select Status —',
+        value: @(Model.CaseStatusId.HasValue ? Model.CaseStatusId.Value.ToString() : "null")
+    });
+
+    // ── Hearing Stage dropdown ────────────────────────────────────────
+    var stageSource = (allHearingStages || []).map(function(s){
+        return { text: s.StageCode + ' — ' + s.StageDescription, value: s.Id };
+    });
+    $('#ddlHearingStage').kendoDropDownList({
+        dataTextField: 'text', dataValueField: 'value',
+        dataSource: stageSource, optionLabel: '— Not in Court —',
+        value: @(Model.CurrentHearingStageId.HasValue ? Model.CurrentHearingStageId.Value.ToString() : "null")
+    });
+
+    // ── Date pickers ──────────────────────────────────────────────────
+    var dateCfg = { format: 'dd/MM/yyyy', culture: 'en-GB' };
+    $('#dtDob, #dtAccident, #dtNextHearing, #dtCaseClosed, #dtSummonsDraft, #dtSummonsSealed')
+        .kendoDatePicker(dateCfg);
+
+    // ── Litigation auto-flag ──────────────────────────────────────────
+    $('#chkClosed').on('change', function () {
+        if ($(this).is(':checked')) {
+            $('#chkActive').prop('checked', false);
+            if (!$('#dtCaseClosed').val()) {
+                $('#dtCaseClosed').data('kendoDatePicker').value(new Date());
+            }
+        }
+    });
+
+    // ── Prevent duplicate submit ──────────────────────────────────────
+    $('#caseForm').on('submit', function () {
+        // Copy Kendo dropdown values into name-mapped hidden fields
+        $('input[name="AssignedCaseworkerId"]').remove();
+        $('input[name="CaseStatusId"]').remove();
+        $('input[name="CurrentHearingStageId"]').remove();
+        $('input[name="Gender"]').remove();
+        $('input[name="ClientVehicleRole"]').remove();
+
+        var appendHidden = function(name, val) {
+            $('<input type="hidden">').attr('name', name).val(val || '').appendTo('#caseForm');
+        };
+
+        appendHidden('AssignedCaseworkerId', $('#ddlCaseworker').data('kendoDropDownList').value());
+        appendHidden('CaseStatusId',         $('#ddlCaseStatus').data('kendoDropDownList').value());
+        appendHidden('CurrentHearingStageId',  $('#ddlHearingStage').data('kendoDropDownList').value());
+        appendHidden('Gender',               $('#ddlGender').data('kendoDropDownList').value());
+        appendHidden('ClientVehicleRole',    $('#ddlVehicleRole').data('kendoDropDownList').value());
+
+        // Fix date fields — parse from kendoDatePicker
+        var fixDate = function(inputId, fieldName) {
+            $('input[name="' + fieldName + '"]').remove();
+            var dp  = $('#' + inputId).data('kendoDatePicker');
+            var val = dp && dp.value() ? dp.value().toISOString() : '';
+            $('<input type="hidden">').attr('name', fieldName).val(val).appendTo('#caseForm');
+        };
+        fixDate('dtDob',          'DateOfBirth');
+        fixDate('dtAccident',     'AccidentDate');
+        fixDate('dtNextHearing',  'NextHearingDate');
+        fixDate('dtCaseClosed',   'CaseClosedDate');
+        fixDate('dtSummonsDraft', 'SummonsDraftedDate');
+        fixDate('dtSummonsSealed','SummonsSealedDate');
+
+        $('#btnSubmit').prop('disabled', true).html('<i class="bi bi-hourglass-split"></i> Saving...');
+    });
+});
+</script>
+}

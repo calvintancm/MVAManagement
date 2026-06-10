@@ -1,0 +1,276 @@
+@{
+    ViewData["Title"] = "My Cases";
+    ViewData["BreadcrumbSection"] = "Case Management";
+    ViewData["BreadcrumbPage"] = "My Cases";
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">My Cases</h1>
+        <p class="page-subtitle">Case files assigned to you — your active workload</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="@Url.Action("OpenNewCase","Case")" class="btn-ptc-primary">
+            <i class="bi bi-plus-lg"></i> Open New Case
+        </a>
+        <button class="btn-ptc-outline" onclick="exportGrid()">
+            <i class="bi bi-download"></i> Export
+        </button>
+    </div>
+</div>
+
+@* My workload summary strip *@
+<div id="myStatStrip" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;">
+    @foreach (var s in new[] {
+        new { Id="myStatTotal",     Label="My Cases",         Icon="bi-folder2-open",  Color="#1d6fa4", Bg="#eff6ff" },
+        new { Id="myStatActive",    Label="Active",           Icon="bi-activity",      Color="#16a34a", Bg="#f0fdf4" },
+        new { Id="myStatLitigation",Label="In Litigation",    Icon="bi-bank2",         Color="#dc2626", Bg="#fef2f2" },
+        new { Id="myStatUrgent",    Label="Hearing ≤ 7 days", Icon="bi-alarm",         Color="#d97706", Bg="#fffbeb" },
+    })
+    {
+        <div class="ptc-card" style="padding:14px 18px;display:flex;align-items:center;gap:12px;border-left:4px solid @s.Color;">
+            <div style="width:38px;height:38px;border-radius:10px;background:@s.Bg;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="bi @s.Icon" style="font-size:18px;color:@s.Color;"></i>
+            </div>
+            <div>
+                <div id="@s.Id" style="font-size:1.4rem;font-weight:700;line-height:1;color:#0f172a;">—</div>
+                <div style="font-size:0.72rem;color:#64748b;margin-top:3px;">@s.Label</div>
+            </div>
+        </div>
+    }
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-body" style="padding:16px 20px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;">
+            <div style="display:flex;flex-direction:column;gap:5px;flex:3;min-width:220px;">
+                <label class="filter-label">Search (File No / Name / IC)</label>
+                <input type="text" id="querySearch" class="k-textbox"
+                       style="width:100%;max-width:320px;" placeholder="Search..." />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:155px;">
+                <label class="filter-label">Case Status</label>
+                <select id="queryStatusId" style="width:155px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:120px;">
+                <label class="filter-label">In Litigation</label>
+                <select id="queryIsInLitigation" style="width:120px;"></select>
+            </div>
+            <div style="display:flex;gap:8px;padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="refreshGrid()">
+                    <i class="bi bi-search"></i> Search
+                </button>
+                <button class="btn-ptc-outline" onclick="clearFilters()">
+                    <i class="bi bi-x-circle"></i> Clear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Grid Card *@
+<div class="ptc-card">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title">
+            <i class="bi bi-person-workspace"></i> My Assigned Cases
+        </h2>
+        <span id="recordCount" class="record-count-badge">0 records</span>
+    </div>
+    <div class="ptc-card-body" style="padding:0;">
+        <div id="main_grid"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+var allStatuses = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.CaseStatuses));
+var statusColorMap = {
+    'ACT':{ bg:'#dbeafe', color:'#1d40ae' }, 'NEG':{ bg:'#fef9c3', color:'#854d0e' },
+    'LIT':{ bg:'#fee2e2', color:'#991b1b' }, 'SET':{ bg:'#dcfce7', color:'#166534' },
+    'CLO':{ bg:'#f1f5f9', color:'#475569' }, 'WIT':{ bg:'#fce7f3', color:'#9d174d' }
+};
+
+$(function () {
+    kendo.culture('en-GB');
+
+    $('#queryStatusId').kendoDropDownList({
+        dataTextField: 'StatusName', dataValueField: 'Id', optionLabel: 'All Statuses',
+        dataSource: allStatuses || []
+    });
+    $('#queryIsInLitigation').kendoDropDownList({
+        dataTextField: 'text', dataValueField: 'value', optionLabel: 'All',
+        dataSource: [{ text: 'In Litigation', value: 'true' }, { text: 'Not in Litigation', value: 'false' }]
+    });
+
+    $('#querySearch').on('keypress', function (e) { if (e.which === 13) refreshGrid(); });
+
+    var isMobile = window.innerWidth <= 576;
+
+    $('#main_grid').kendoGrid({
+        dataSource: {
+            transport: {
+                read: { url: '@Url.Action("CaseRead","Case")', type: 'POST' },
+                parameterMap: function (data, operation) {
+                    var token = $('input[name="__RequestVerificationToken"]').val();
+                    if (operation === 'read')
+                        return $.extend({}, data, getFilters(), { scope: 'mine', __RequestVerificationToken: token });
+                    return $.extend({}, data, { __RequestVerificationToken: token });
+                }
+            },
+            schema: {
+                data: 'Data', total: 'Total', errors: 'Errors',
+                model: {
+                    id: 'Id',
+                    fields: {
+                        Id: { type: 'number', editable: false },
+                        FileNumber: { type: 'string', editable: false },
+                        AccidentDate: { type: 'date' },
+                        ClaimedAmount: { type: 'number' },
+                        NextHearingDate: { type: 'date' }
+                    }
+                }
+            },
+            pageSize: 15, serverPaging: true, serverSorting: true,
+            sort: { field: 'NextHearingDate', dir: 'asc' },
+            requestEnd: function (e) {
+                if (e.type === 'read' && e.response) {
+                    var t = e.response.Total || 0;
+                    $('#recordCount').text(t + ' record' + (t !== 1 ? 's' : ''));
+                    computeMyStats(e.response.Data || []);
+                }
+            },
+            error: function (e) { handleGridError(e); }
+        },
+
+        columns: [
+            { field: 'Id', hidden: true },
+            {
+                field: 'FileNumber', title: 'File No.', width: 165,
+                template: function (d) {
+                    return '<a href="@Url.Action("EditCase","Case")?id=' + d.Id
+                         + '" style="font-family:monospace;font-weight:700;font-size:0.83rem;color:#1d6fa4;">'
+                         + kendo.htmlEncode(d.FileNumber || '') + '</a>';
+                }
+            },
+            {
+                field: 'PrimaryClaimantName', title: 'Claimant', width: 200,
+                template: function (d) {
+                    var sub = d.MobileNumber ? '<div style="font-size:0.72rem;color:#64748b;">' + kendo.htmlEncode(d.MobileNumber) + '</div>' : '';
+                    return '<div style="font-weight:600;">' + kendo.htmlEncode(d.PrimaryClaimantName || '') + '</div>' + sub;
+                }
+            },
+            {
+                field: 'CaseStatusName', title: 'Status', width: 130, sortable: false,
+                template: function (d) {
+                    if (!d.CaseStatusName) return '<span style="color:#94a3b8;">—</span>';
+                    var map = statusColorMap[d.CaseStatusCode || ''] || { bg:'#e2e8f0', color:'#475569' };
+                    return '<span style="background:' + map.bg + ';color:' + map.color + ';padding:2px 10px;border-radius:20px;font-size:0.72rem;font-weight:700;">'
+                         + kendo.htmlEncode(d.CaseStatusName) + '</span>';
+                }
+            },
+            {
+                field: 'AccidentDate', title: 'Accident', width: 110,
+                template: function (d) {
+                    if (!d.AccidentDate) return '<span style="color:#94a3b8;">—</span>';
+                    var dt = kendo.parseDate(d.AccidentDate);
+                    return dt ? kendo.toString(dt, 'dd/MM/yyyy') : '—';
+                }
+            },
+            {
+                field: 'NextHearingDate', title: 'Next Hearing', width: 130,
+                template: function (d) {
+                    if (!d.NextHearingDate) return '<span style="color:#94a3b8;">—</span>';
+                    var dt   = kendo.parseDate(d.NextHearingDate);
+                    var days = dt ? Math.ceil((dt - new Date()) / 86400000) : null;
+                    if (days === null) return '—';
+                    var urgent = days <= 7 && days >= 0;
+                    var overdue = days < 0;
+                    var color = overdue ? 'color:#991b1b;font-weight:700;' : urgent ? 'color:#d97706;font-weight:700;' : '';
+                    var badge = urgent ? ' <span style="background:#fef3c7;color:#92400e;font-size:0.68rem;padding:1px 6px;border-radius:10px;">' + days + 'd</span>' : '';
+                    return '<span style="' + color + '">' + kendo.toString(dt, 'dd/MM/yyyy') + '</span>' + badge;
+                }
+            },
+            {
+                field: 'ClaimedAmount', title: 'Claimed (MYR)', width: 140,
+                attributes: { style: 'text-align:right;' },
+                template: function (d) {
+                    if (!d.ClaimedAmount) return '<span style="color:#94a3b8;">—</span>';
+                    return '<span style="font-variant-numeric:tabular-nums;font-weight:600;">RM ' + kendo.toString(d.ClaimedAmount, 'n2') + '</span>';
+                }
+            },
+            {
+                field: 'IsInLitigation', title: 'Litigation', width: 90,
+                attributes: { style: 'text-align:center;' },
+                template: function (d) {
+                    return d.IsInLitigation
+                        ? '<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:20px;font-size:0.72rem;font-weight:700;">Yes</span>'
+                        : '<span style="color:#94a3b8;font-size:0.8rem;">No</span>';
+                }
+            },
+            {
+                title: 'Actions', width: 130, sortable: false,
+                template: function (d) {
+                    var editUrl = '@Url.Action("EditCase","Case")?id=' + d.Id;
+                    var viewUrl = '@Url.Action("ViewCase","Case")?id=' + d.Id;
+                    return '<div style="display:flex;align-items:center;gap:6px;">'
+                         + '<a href="' + viewUrl + '" class="btn btn-sm" style="padding:3px 10px;font-size:12px;background:#f1f5f9;border:none;color:#1d6fa4;" title="View"><i class="bi bi-eye"></i></a>'
+                         + '<a href="' + editUrl + '" class="btn btn-sm" style="padding:3px 10px;font-size:12px;background:#e0e7ff;border:none;color:#3730a3;" title="Edit"><i class="bi bi-pencil"></i></a>'
+                         + '</div>';
+                }
+            }
+        ],
+
+        editable: false,
+        pageable: { pageSize: 15, pageSizes: [15, 30, 50], buttonCount: 5 },
+        sortable: true, scrollable: true, height: 520,
+        dataBound: function () {
+            this.thead.find('th').css({ background:'#f8fafc','font-weight':'600','font-size':'0.77rem',color:'#475569','border-color':'#e2e8f0' });
+        }
+    });
+
+    refreshGrid();
+});
+
+function computeMyStats(rows) {
+    var total     = rows.length;
+    var active    = rows.filter(function(r){ return r.IsActive && !r.IsClosed; }).length;
+    var lit       = rows.filter(function(r){ return r.IsInLitigation; }).length;
+    var urgent    = rows.filter(function(r){
+        if (!r.NextHearingDate) return false;
+        var days = Math.ceil((new Date(r.NextHearingDate) - new Date()) / 86400000);
+        return days >= 0 && days <= 7;
+    }).length;
+    $('#myStatTotal').text(total);
+    $('#myStatActive').text(active);
+    $('#myStatLitigation').text(lit);
+    $('#myStatUrgent').text(urgent);
+}
+
+function getFilters() {
+    return {
+        search:         $('#querySearch').val().trim(),
+        statusId:       $('#queryStatusId').data('kendoDropDownList') ? $('#queryStatusId').data('kendoDropDownList').value() : '',
+        isInLitigation: $('#queryIsInLitigation').data('kendoDropDownList') ? $('#queryIsInLitigation').data('kendoDropDownList').value() : ''
+    };
+}
+function refreshGrid() {
+    var g = $('#main_grid').data('kendoGrid');
+    if (g) g.dataSource.query({ page: 1, pageSize: g.dataSource.pageSize(), sort: g.dataSource.sort() });
+}
+function clearFilters() {
+    $('#querySearch').val('');
+    ['#queryStatusId','#queryIsInLitigation'].forEach(function(id){ var d=$(id).data('kendoDropDownList'); if(d) d.value(''); });
+    refreshGrid();
+}
+function exportGrid() { var g=$('#main_grid').data('kendoGrid'); if(g){ g.saveAsExcel(); KSwal.toast('info','Exporting...'); } }
+function handleGridError(e) {
+    var msg='An error occurred.';
+    if(e.errors){ var p=[]; $.each(e.errors,function(k,v){ if(v.errors) p.push(v.errors.join('\n')); else if(typeof v==='string') p.push(v); }); if(p.length) msg=p.join('\n'); }
+    else if(e.xhr){ if(e.xhr.status===401) msg='Session expired.'; else if(e.xhr.status===403) msg='Access denied.'; else if(e.xhr.status===500) msg='Server error.'; }
+    KSwal.error('Grid Error', msg);
+}
+</script>
+}

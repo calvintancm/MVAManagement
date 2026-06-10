@@ -206,10 +206,29 @@
                             url:  '@Url.Action("UserRolesRead", "Access")',
                             type: 'POST'
                         },
-                        parameterMap: function (data, operation) {
-                            if (operation === 'read')
-                                return $.extend({}, data, getFilters(), { __RequestVerificationToken: token });
-                            return $.extend({}, data, { __RequestVerificationToken: token });
+                            parameterMap: function (data, operation) {
+                            if (operation === 'read') {
+                                var filters  = getFilters();
+                                var sortField = '';
+                                var sortDir   = '';
+
+                                if (data.sort && data.sort.length > 0) {
+                                    sortField = data.sort[0].field;
+                                    sortDir   = data.sort[0].dir;
+                                }
+
+                                return {
+                                    skip:     data.skip || 0,
+                                    take:     data.take || 20,
+                                    userName: filters.userName,
+                                    role:     filters.role,
+                                    isActive: filters.isActive,
+                                    sort:     sortField,
+                                    dir:      sortDir,
+                                    __RequestVerificationToken: token
+                                };
+                            }
+                            return data;
                         }
                     },
                     schema: {

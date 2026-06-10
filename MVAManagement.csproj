@@ -17,7 +17,10 @@
 
   <ItemGroup>
     <Folder Include="Areas\Identity\Pages\Account\" />
+    <Folder Include="Migrations\" />
     <Folder Include="Views\Access\" />
+    <Folder Include="Views\Case\" />
+    <Folder Include="Views\Hearing\" />
   </ItemGroup>
 
 </Project>

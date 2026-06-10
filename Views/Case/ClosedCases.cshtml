@@ -1,0 +1,303 @@
+@{
+    ViewData["Title"] = "Closed Cases";
+    ViewData["BreadcrumbSection"] = "Case Management";
+    ViewData["BreadcrumbPage"] = "Closed Cases";
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Closed Cases</h1>
+        <p class="page-subtitle">Archived MVA case files — concluded, settled, or withdrawn</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-ptc-outline" onclick="exportGrid()">
+            <i class="bi bi-download"></i> Export
+        </button>
+    </div>
+</div>
+
+@* Summary strip for closed cases *@
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;">
+    @foreach (var s in new[] {
+        new { Id="cStatTotal",    Label="Total Closed",        Icon="bi-archive-fill",  Color="#64748b", Bg="#f8fafc" },
+        new { Id="cStatSettled",  Label="Code: Settled (SET)", Icon="bi-check-circle",  Color="#16a34a", Bg="#f0fdf4" },
+        new { Id="cStatWithdrawn",Label="Withdrawn (WIT)",     Icon="bi-x-circle",      Color="#9d174d", Bg="#fdf2f8" },
+        new { Id="cStatThisYear", Label="Closed This Year",    Icon="bi-calendar-check",Color="#1d6fa4", Bg="#eff6ff" },
+    })
+    {
+        <div class="ptc-card" style="padding:14px 18px;display:flex;align-items:center;gap:12px;border-left:4px solid @s.Color;">
+            <div style="width:38px;height:38px;border-radius:10px;background:@s.Bg;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="bi @s.Icon" style="font-size:18px;color:@s.Color;"></i>
+            </div>
+            <div>
+                <div id="@s.Id" style="font-size:1.4rem;font-weight:700;line-height:1;color:#0f172a;">—</div>
+                <div style="font-size:0.72rem;color:#64748b;margin-top:3px;">@s.Label</div>
+            </div>
+        </div>
+    }
+</div>
+
+@* Info banner — archive notice *@
+<div class="ptc-card mb-3" style="border-left:4px solid #64748b;">
+    <div class="ptc-card-body" style="padding:12px 20px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+            <i class="bi bi-archive-fill" style="color:#64748b;font-size:18px;flex-shrink:0;"></i>
+            <div style="font-size:0.8rem;color:var(--text-muted);line-height:1.6;">
+                Closed cases are <strong>read-only</strong>. To reactivate a case, open it and uncheck <em>Closed</em> in the Status &amp; Litigation section.
+                Records here include settled, withdrawn, and administratively closed files.
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-body" style="padding:16px 20px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;">
+            <div style="display:flex;flex-direction:column;gap:5px;flex:3;min-width:220px;">
+                <label class="filter-label">Search (File No / Name / IC)</label>
+                <input type="text" id="querySearch" class="k-textbox"
+                       style="width:100%;max-width:320px;" placeholder="Search..." />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:155px;">
+                <label class="filter-label">Case Status</label>
+                <select id="queryStatusId" style="width:155px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:175px;">
+                <label class="filter-label">Assigned Caseworker</label>
+                <select id="queryCaseworkerId" style="width:175px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:130px;">
+                <label class="filter-label">Closed Date From</label>
+                <input type="text" id="dtClosedFrom" class="k-textbox" style="width:130px;" placeholder="dd/MM/yyyy" />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:130px;">
+                <label class="filter-label">Closed Date To</label>
+                <input type="text" id="dtClosedTo" class="k-textbox" style="width:130px;" placeholder="dd/MM/yyyy" />
+            </div>
+            <div style="display:flex;gap:8px;padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="refreshGrid()">
+                    <i class="bi bi-search"></i> Search
+                </button>
+                <button class="btn-ptc-outline" onclick="clearFilters()">
+                    <i class="bi bi-x-circle"></i> Clear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Grid Card *@
+<div class="ptc-card">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title">
+            <i class="bi bi-archive"></i> Closed Case Archive
+        </h2>
+        <span id="recordCount" class="record-count-badge">0 records</span>
+    </div>
+    <div class="ptc-card-body" style="padding:0;">
+        <div id="main_grid"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+var allStatuses    = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.CaseStatuses));
+var allCaseworkers = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.Caseworkers));
+
+var statusColorMap = {
+    'ACT':{ bg:'#dbeafe', color:'#1d40ae' }, 'NEG':{ bg:'#fef9c3', color:'#854d0e' },
+    'LIT':{ bg:'#fee2e2', color:'#991b1b' }, 'SET':{ bg:'#dcfce7', color:'#166534' },
+    'CLO':{ bg:'#f1f5f9', color:'#475569' }, 'WIT':{ bg:'#fce7f3', color:'#9d174d' }
+};
+
+$(function () {
+    kendo.culture('en-GB');
+
+    $('#queryStatusId').kendoDropDownList({
+        dataTextField: 'StatusName', dataValueField: 'Id', optionLabel: 'All Statuses',
+        dataSource: allStatuses || []
+    });
+    $('#queryCaseworkerId').kendoDropDownList({
+        dataTextField: 'FullName', dataValueField: 'Id', optionLabel: 'All Caseworkers',
+        dataSource: allCaseworkers || []
+    });
+    $('#dtClosedFrom, #dtClosedTo').kendoDatePicker({ format: 'dd/MM/yyyy', culture: 'en-GB' });
+
+    $('#querySearch').on('keypress', function(e){ if(e.which===13) refreshGrid(); });
+
+    var isMobile = window.innerWidth <= 576;
+
+    $('#main_grid').kendoGrid({
+        dataSource: {
+            transport: {
+                read: { url: '@Url.Action("CaseRead","Case")', type: 'POST' },
+                parameterMap: function (data, operation) {
+                    var token = $('input[name="__RequestVerificationToken"]').val();
+                    if (operation === 'read')
+                        return $.extend({}, data, getFilters(), { scope: 'closed', __RequestVerificationToken: token });
+                    return $.extend({}, data, { __RequestVerificationToken: token });
+                }
+            },
+            schema: {
+                data: 'Data', total: 'Total', errors: 'Errors',
+                model: {
+                    id: 'Id',
+                    fields: {
+                        Id:                  { type: 'number', editable: false },
+                        FileNumber:          { type: 'string', editable: false },
+                        AccidentDate:        { type: 'date' },
+                        ClaimedAmount:       { type: 'number' },
+                        CaseClosedDate:      { type: 'date' }
+                    }
+                }
+            },
+            pageSize: 15, serverPaging: true, serverSorting: true,
+            sort: { field: 'CaseClosedDate', dir: 'desc' },
+            requestEnd: function (e) {
+                if (e.type === 'read' && e.response) {
+                    var t = e.response.Total || 0;
+                    $('#recordCount').text(t + ' record' + (t !== 1 ? 's' : ''));
+                    computeClosedStats(e.response.Data || []);
+                }
+            },
+            error: function (e) { handleGridError(e); }
+        },
+
+        columns: [
+            { field: 'Id', hidden: true },
+            {
+                field: 'FileNumber', title: 'File No.', width: 165,
+                template: function (d) {
+                    return '<a href="@Url.Action("ViewCase","Case")?id=' + d.Id
+                         + '" style="font-family:monospace;font-weight:700;font-size:0.83rem;color:#64748b;opacity:0.85;">'
+                         + kendo.htmlEncode(d.FileNumber || '') + '</a>';
+                }
+            },
+            {
+                field: 'PrimaryClaimantName', title: 'Claimant', width: 210,
+                template: function (d) {
+                    var sub = d.NationalId ? '<div style="font-size:0.72rem;color:#94a3b8;">' + kendo.htmlEncode(d.NationalId) + '</div>' : '';
+                    return '<div style="font-weight:600;color:#475569;">' + kendo.htmlEncode(d.PrimaryClaimantName || '') + '</div>' + sub;
+                }
+            },
+            {
+                field: 'CaseStatusName', title: 'Final Status', width: 130, sortable: false,
+                template: function (d) {
+                    if (!d.CaseStatusName) return '<span style="color:#94a3b8;">—</span>';
+                    var map = statusColorMap[d.CaseStatusCode || ''] || { bg:'#e2e8f0', color:'#475569' };
+                    return '<span style="background:' + map.bg + ';color:' + map.color + ';padding:2px 10px;border-radius:20px;font-size:0.72rem;font-weight:700;">'
+                         + kendo.htmlEncode(d.CaseStatusName) + '</span>';
+                }
+            },
+            {
+                field: 'AccidentDate', title: 'Accident Date', width: 120,
+                template: function (d) {
+                    if (!d.AccidentDate) return '<span style="color:#94a3b8;">—</span>';
+                    var dt = kendo.parseDate(d.AccidentDate);
+                    return dt ? kendo.toString(dt, 'dd/MM/yyyy') : '—';
+                }
+            },
+            {
+                field: 'AssignedCaseworkerName', title: 'Caseworker', width: 155, sortable: false,
+                template: function (d) {
+                    if (!d.AssignedCaseworkerName) return '<span style="color:#94a3b8;">—</span>';
+                    return '<span style="font-size:0.83rem;color:#64748b;">' + kendo.htmlEncode(d.AssignedCaseworkerName) + '</span>';
+                }
+            },
+            {
+                field: 'ClaimedAmount', title: 'Claimed (MYR)', width: 140,
+                attributes: { style: 'text-align:right;' },
+                template: function (d) {
+                    if (!d.ClaimedAmount) return '<span style="color:#94a3b8;">—</span>';
+                    return '<span style="font-variant-numeric:tabular-nums;font-weight:600;color:#475569;">RM ' + kendo.toString(d.ClaimedAmount, 'n2') + '</span>';
+                }
+            },
+            {
+                field: 'CurrentOffer', title: 'Final Offer (MYR)', width: 145,
+                attributes: { style: 'text-align:right;' },
+                template: function (d) {
+                    if (!d.CurrentOffer) return '<span style="color:#94a3b8;">—</span>';
+                    return '<span style="font-variant-numeric:tabular-nums;color:#16a34a;font-weight:600;">RM ' + kendo.toString(d.CurrentOffer, 'n2') + '</span>';
+                }
+            },
+            {
+                field: 'CaseClosedDate', title: 'Closed On', width: 120,
+                template: function (d) {
+                    if (!d.CaseClosedDate) return '<span style="color:#94a3b8;">—</span>';
+                    var dt = kendo.parseDate(d.CaseClosedDate);
+                    return dt ? kendo.toString(dt, 'dd/MM/yyyy') : '—';
+                }
+            },
+            {
+                title: 'Actions', width: 110, sortable: false,
+                template: function (d) {
+                    var viewUrl = '@Url.Action("ViewCase","Case")?id=' + d.Id;
+                    var editUrl = '@Url.Action("EditCase","Case")?id=' + d.Id;
+                    return '<div style="display:flex;align-items:center;gap:6px;">'
+                         + '<a href="' + viewUrl + '" class="btn btn-sm" style="padding:3px 10px;font-size:12px;background:#f1f5f9;border:none;color:#64748b;" title="View"><i class="bi bi-eye"></i></a>'
+                         + '<a href="' + editUrl + '" class="btn btn-sm" style="padding:3px 10px;font-size:12px;background:#e2e8f0;border:none;color:#64748b;" title="Reactivate"><i class="bi bi-arrow-counterclockwise"></i></a>'
+                         + '</div>';
+                }
+            }
+        ],
+
+        editable: false,
+        pageable: { pageSize: 15, pageSizes: [15, 30, 50, 100], buttonCount: 5 },
+        sortable: true, scrollable: true, height: 520,
+        dataBound: function () {
+            this.thead.find('th').css({ background:'#f8fafc','font-weight':'600','font-size':'0.77rem',color:'#475569','border-color':'#e2e8f0' });
+            // Fade closed rows slightly
+            this.tbody.find('tr').css('opacity','0.85');
+        }
+    });
+
+    refreshGrid();
+});
+
+function computeClosedStats(rows) {
+    var settled   = rows.filter(function(r){ return r.CaseStatusCode === 'SET'; }).length;
+    var withdrawn = rows.filter(function(r){ return r.CaseStatusCode === 'WIT'; }).length;
+    var thisYear  = rows.filter(function(r){
+        if (!r.CaseClosedDate) return false;
+        return new Date(r.CaseClosedDate).getFullYear() === new Date().getFullYear();
+    }).length;
+    $('#cStatTotal').text(rows.length);
+    $('#cStatSettled').text(settled);
+    $('#cStatWithdrawn').text(withdrawn);
+    $('#cStatThisYear').text(thisYear);
+}
+
+function getFilters() {
+    var dpFrom = $('#dtClosedFrom').data('kendoDatePicker');
+    var dpTo   = $('#dtClosedTo').data('kendoDatePicker');
+    return {
+        search:         $('#querySearch').val().trim(),
+        statusId:       $('#queryStatusId').data('kendoDropDownList') ? $('#queryStatusId').data('kendoDropDownList').value() : '',
+        caseworkerId:   $('#queryCaseworkerId').data('kendoDropDownList') ? $('#queryCaseworkerId').data('kendoDropDownList').value() : '',
+        accidentDateFrom: dpFrom && dpFrom.value() ? dpFrom.value().toISOString() : '',
+        accidentDateTo:   dpTo   && dpTo.value()   ? dpTo.value().toISOString()   : ''
+    };
+}
+function refreshGrid() {
+    var g = $('#main_grid').data('kendoGrid');
+    if (g) g.dataSource.query({ page: 1, pageSize: g.dataSource.pageSize(), sort: g.dataSource.sort() });
+}
+function clearFilters() {
+    $('#querySearch').val('');
+    ['#queryStatusId','#queryCaseworkerId'].forEach(function(id){ var d=$(id).data('kendoDropDownList'); if(d) d.value(''); });
+    var f=$('#dtClosedFrom').data('kendoDatePicker'); if(f) f.value(null);
+    var t=$('#dtClosedTo').data('kendoDatePicker');   if(t) t.value(null);
+    refreshGrid();
+}
+function exportGrid() { var g=$('#main_grid').data('kendoGrid'); if(g){ g.saveAsExcel(); KSwal.toast('info','Exporting...'); } }
+function handleGridError(e) {
+    var msg='An error occurred.';
+    if(e.errors){ var p=[]; $.each(e.errors,function(k,v){ if(v.errors) p.push(v.errors.join('\n')); else if(typeof v==='string') p.push(v); }); if(p.length) msg=p.join('\n'); }
+    else if(e.xhr){ if(e.xhr.status===401) msg='Session expired.'; else if(e.xhr.status===403) msg='Access denied.'; else if(e.xhr.status===500) msg='Server error.'; }
+    KSwal.error('Grid Error', msg);
+}
+</script>
+}

@@ -14,6 +14,9 @@ namespace MVAManagement.Models.MVA
         /// <summary>Full description of the hearing stage. E.g. "Case Management Conference".</summary>
         public string StageDescription { get; set; } = null!;
 
+        /// <summary>Sort order for dropdowns and display lists.</summary>
+        public int DisplayOrder { get; set; } = 0;
+
         // Navigation Properties
         public virtual ICollection<CaseFile> CaseFiles { get; set; } = new List<CaseFile>();
         public virtual ICollection<HearingRecord> HearingRecords { get; set; } = new List<HearingRecord>();

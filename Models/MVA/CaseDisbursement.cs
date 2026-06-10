@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace MVAManagement.Models.MVA
 {
     /// <summary>
@@ -35,6 +37,7 @@ namespace MVAManagement.Models.MVA
         public string Payee { get; set; } = null!;
 
         /// <summary>Amount paid, in the local currency (MYR by default).</summary>
+        [Column(TypeName = "decimal(18,2)")]
         public decimal Amount { get; set; }
 
         // ── PAYMENT DETAILS ───────────────────────────────────────────────────

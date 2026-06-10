@@ -401,7 +401,7 @@
                     <li>
                         @if (isCaseworker)
                         {
-                            <a class="sb-nav-link" asp-controller="CaseFile" asp-action="Index"
+                            <a class="sb-nav-link" asp-controller="Case" asp-action="AllCases"
                                data-ptc-tooltip="All Cases">
                                 <span class="sb-nav-icon"><i class="bi bi-list-ul"></i></span>
                                 <span class="sb-nav-label">All Cases</span>
@@ -418,7 +418,7 @@
                     <li>
                         @if (isCaseworker)
                         {
-                            <a class="sb-nav-link" asp-controller="CaseFile" asp-action="Create"
+                            <a class="sb-nav-link" asp-controller="Case" asp-action="OpenNewCase"
                                data-ptc-tooltip="Open New Case">
                                 <span class="sb-nav-icon"><i class="bi bi-folder-plus"></i></span>
                                 <span class="sb-nav-label">Open New Case</span>
@@ -435,7 +435,7 @@
                     <li>
                         @if (isCaseworker)
                         {
-                            <a class="sb-nav-link" asp-controller="CaseFile" asp-action="MyCases"
+                            <a class="sb-nav-link" asp-controller="Case" asp-action="MyCases"
                                data-ptc-tooltip="My Cases">
                                 <span class="sb-nav-icon"><i class="bi bi-person-lines-fill"></i></span>
                                 <span class="sb-nav-label">My Cases</span>
@@ -452,7 +452,7 @@
                     <li>
                         @if (isCaseworker)
                         {
-                            <a class="sb-nav-link" asp-controller="CaseFile" asp-action="Closed"
+                            <a class="sb-nav-link" asp-controller="Case" asp-action="ClosedCases"
                                data-ptc-tooltip="Closed Cases">
                                 <span class="sb-nav-icon"><i class="bi bi-archive"></i></span>
                                 <span class="sb-nav-label">Closed Cases</span>
@@ -472,16 +472,16 @@
                     <div class="sb-flyout-header">Case Files</div>
                     @if (isCaseworker)
                     {
-                        <a class="sb-flyout-item" asp-controller="CaseFile" asp-action="Index">
+                        <a class="sb-flyout-item" asp-controller="Case" asp-action="AllCases">
                             <i class="bi bi-list-ul"></i> All Cases
                         </a>
-                        <a class="sb-flyout-item" asp-controller="CaseFile" asp-action="Create">
+                        <a class="sb-flyout-item" asp-controller="Case" asp-action="OpenNewCase">
                             <i class="bi bi-folder-plus"></i> Open New Case
                         </a>
-                        <a class="sb-flyout-item" asp-controller="CaseFile" asp-action="MyCases">
+                        <a class="sb-flyout-item" asp-controller="Case" asp-action="MyCases">
                             <i class="bi bi-person-lines-fill"></i> My Cases
                         </a>
-                        <a class="sb-flyout-item" asp-controller="CaseFile" asp-action="Closed">
+                        <a class="sb-flyout-item" asp-controller="Case" asp-action="ClosedCases">
                             <i class="bi bi-archive"></i> Closed Cases
                         </a>
                     }
@@ -503,6 +503,7 @@
                 </div>
             </li>
 
+
             @* ── Court & Hearings ── *@
             <li class="has-submenu">
                 <button class="sb-nav-link" data-bs-toggle="collapse"
@@ -517,16 +518,16 @@
                     <li>
                         @if (isCaseworker)
                         {
-                            <a class="sb-nav-link" asp-controller="Hearing" asp-action="Index"
+                            <a class="sb-nav-link" asp-controller="Hearing" asp-action="AllHearings"
                                data-ptc-tooltip="All Hearings">
-                                <span class="sb-nav-icon"><i class="bi bi-calendar3"></i></span>
+                                <span class="sb-nav-icon"><i class="bi bi-journal-text"></i></span>
                                 <span class="sb-nav-label">All Hearings</span>
                             </a>
                         }
                         else
                         {
                             <a class="sb-nav-link disabled" tabindex="-1" aria-disabled="true">
-                                <span class="sb-nav-icon"><i class="bi bi-calendar3 text-muted"></i></span>
+                                <span class="sb-nav-icon"><i class="bi bi-journal-text text-muted"></i></span>
                                 <span class="sb-nav-label text-muted">All Hearings</span>
                             </a>
                         }
@@ -535,23 +536,23 @@
                         @if (isCaseworker)
                         {
                             <a class="sb-nav-link" asp-controller="Hearing" asp-action="Upcoming"
-                               data-ptc-tooltip="Upcoming Hearings">
+                               data-ptc-tooltip="Upcoming">
                                 <span class="sb-nav-icon"><i class="bi bi-calendar-event"></i></span>
-                                <span class="sb-nav-label">Upcoming Hearings</span>
+                                <span class="sb-nav-label">Upcoming</span>
                             </a>
                         }
                         else
                         {
                             <a class="sb-nav-link disabled" tabindex="-1" aria-disabled="true">
                                 <span class="sb-nav-icon"><i class="bi bi-calendar-event text-muted"></i></span>
-                                <span class="sb-nav-label text-muted">Upcoming Hearings</span>
+                                <span class="sb-nav-label text-muted">Upcoming</span>
                             </a>
                         }
                     </li>
                     <li>
                         @if (isCaseworker)
                         {
-                            <a class="sb-nav-link" asp-controller="Hearing" asp-action="Schedule"
+                            <a class="sb-nav-link" asp-controller="Hearing" asp-action="ScheduleHearing"
                                data-ptc-tooltip="Schedule Hearing">
                                 <span class="sb-nav-icon"><i class="bi bi-calendar-plus"></i></span>
                                 <span class="sb-nav-label">Schedule Hearing</span>
@@ -571,23 +572,23 @@
                     <div class="sb-flyout-header">Court &amp; Hearings</div>
                     @if (isCaseworker)
                     {
-                        <a class="sb-flyout-item" asp-controller="Hearing" asp-action="Index">
-                            <i class="bi bi-calendar3"></i> All Hearings
+                        <a class="sb-flyout-item" asp-controller="Hearing" asp-action="AllHearings">
+                            <i class="bi bi-journal-text"></i> All Hearings
                         </a>
                         <a class="sb-flyout-item" asp-controller="Hearing" asp-action="Upcoming">
-                            <i class="bi bi-calendar-event"></i> Upcoming Hearings
+                            <i class="bi bi-calendar-event"></i> Upcoming
                         </a>
-                        <a class="sb-flyout-item" asp-controller="Hearing" asp-action="Schedule">
+                        <a class="sb-flyout-item" asp-controller="Hearing" asp-action="ScheduleHearing">
                             <i class="bi bi-calendar-plus"></i> Schedule Hearing
                         </a>
                     }
                     else
                     {
                         <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true">
-                            <i class="bi bi-calendar3 text-muted"></i> All Hearings
+                            <i class="bi bi-journal-text text-muted"></i> All Hearings
                         </a>
                         <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true">
-                            <i class="bi bi-calendar-event text-muted"></i> Upcoming Hearings
+                            <i class="bi bi-calendar-event text-muted"></i> Upcoming
                         </a>
                         <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true">
                             <i class="bi bi-calendar-plus text-muted"></i> Schedule Hearing
@@ -595,6 +596,7 @@
                     }
                 </div>
             </li>
+
 
             @* ── Claims & Settlement ── *@
             <li class="has-submenu">

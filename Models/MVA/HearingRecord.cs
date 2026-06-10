@@ -30,6 +30,8 @@ namespace MVAManagement.Models.MVA
         /// <summary>Courtroom or chamber number within the court venue.</summary>
         public string? CourtroomNumber { get; set; }
 
+       
+
         // ── PRESIDING OFFICER ─────────────────────────────────────────────────
 
         /// <summary>Name of the presiding judge or magistrate for this hearing.</summary>

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using MVAManagement.Models;
 using MVAManagement.Models.MVA;
+using System.Reflection.Emit;
 
 namespace MVAManagement.Data
 {
@@ -34,23 +35,14 @@ namespace MVAManagement.Data
 
         public DbSet<CourtVenue>          CourtVenues          { get; set; }    
         public DbSet<DisbursementCategory> DisbursementCategories { get; set; }
+
+        public DbSet<HearingStage> HearingStages { get; set; }
         protected override void OnModelCreating(ModelBuilder builder)
         {
             // MUST call base first — wires up all ASP.NET Identity tables
             base.OnModelCreating(builder);
 
-            // ── Map every DbSet to its exact SQL table name ───────────────
-            //
-            // EF Core default: pluralises the class name
-            //   CaseFile → "CaseFiles"  ← does NOT exist in your DB
-            //
-            // Your tables are singular (confirmed from INFORMATION_SCHEMA):
-            //   CaseFile, CaseDisbursement, CaseDocument, CaseStatus,
-            //   CaseworkerProfile, CourtVenue, CaseJournal
-            //
-            // Remaining tables (HearingRecord, InjuryRecord, AccidentVehicle,
-            // AuditSessionLog, InsurerRegistry) follow the same singular
-            // pattern — adjust the string if any differ.
+           
 
             builder.Entity<CaseFile>().ToTable("CaseFile");
             builder.Entity<CaseDisbursement>().ToTable("CaseDisbursement");
@@ -63,7 +55,29 @@ namespace MVAManagement.Data
             builder.Entity<AuditSessionLog>().ToTable("AuditSessionLog");
             builder.Entity<InsurerRegistry>().ToTable("InsurerRegistry");
             builder.Entity<CourtVenue>().ToTable("CourtVenue");
+            builder.Entity<HearingStage>().ToTable("HearingStage");
+
+            // Apply decimal precision globally
+            foreach (var entity in builder.Model.GetEntityTypes())
+            {
+                foreach (var property in entity.GetProperties().Where(p => p.ClrType == typeof(decimal)))
+                {
+                    property.SetColumnType("decimal(18,2)");
+                }
+            }
+
+
+
         }
+
+        //     builder.Entity<CaseDisbursement>()
+        //.Property(c => c.Amount)
+        //.HasColumnType("decimal(18,2)");
+
+        //     builder.Entity<CaseFile>()
+        //         .Property(c => c.ClaimedAmount)
+        //         .HasColumnType("decimal(18,2)");
+
 
     }
 }

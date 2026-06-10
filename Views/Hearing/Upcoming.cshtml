@@ -1,0 +1,340 @@
+@{
+    ViewData["Title"] = "Upcoming Hearings";
+    ViewData["BreadcrumbSection"] = "Case Management";
+    ViewData["BreadcrumbPage"] = "Upcoming Hearings";
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Upcoming Hearings</h1>
+        <p class="page-subtitle">Pending court hearings from today onwards — sorted by earliest date</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="@Url.Action("ScheduleHearing","Hearing")" class="btn-ptc-primary">
+            <i class="bi bi-plus-lg"></i> Schedule Hearing
+        </a>
+        <button class="btn-ptc-outline" onclick="exportGrid()">
+            <i class="bi bi-download"></i> Export
+        </button>
+    </div>
+</div>
+
+@* Urgency strip — Today / This Week / This Month / Overdue *@
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;">
+    @foreach (var s in new[] {
+        new { Id="uStatToday",   Label="Today",         Icon="bi-alarm",          Color="#dc2626", Bg="#fef2f2" },
+        new { Id="uStatWeek",    Label="Next 7 Days",   Icon="bi-calendar-week",  Color="#d97706", Bg="#fffbeb" },
+        new { Id="uStatMonth",   Label="Next 30 Days",  Icon="bi-calendar-month", Color="#7c3aed", Bg="#faf5ff" },
+        new { Id="uStatPending", Label="Total Pending", Icon="bi-hourglass-split",Color="#1d6fa4", Bg="#eff6ff" },
+    })
+    {
+        <div class="ptc-card" style="padding:14px 18px;display:flex;align-items:center;gap:12px;border-left:4px solid @s.Color;">
+            <div style="width:38px;height:38px;border-radius:10px;background:@s.Bg;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="bi @s.Icon" style="font-size:18px;color:@s.Color;"></i>
+            </div>
+            <div>
+                <div id="@s.Id" style="font-size:1.4rem;font-weight:700;line-height:1;color:#0f172a;">—</div>
+                <div style="font-size:0.72rem;color:#64748b;margin-top:3px;">@s.Label</div>
+            </div>
+        </div>
+    }
+</div>
+
+@* Info banner *@
+<div class="ptc-card mb-3" style="border-left:4px solid #d97706;">
+    <div class="ptc-card-body" style="padding:12px 20px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+            <i class="bi bi-calendar-event-fill" style="color:#d97706;font-size:18px;flex-shrink:0;"></i>
+            <div style="font-size:0.8rem;color:var(--text-muted);line-height:1.6;">
+                Showing <strong>pending hearings from today onwards</strong> only.
+                Dates highlighted <span style="color:#dc2626;font-weight:700;">red</span> = today,
+                <span style="color:#d97706;font-weight:700;">amber</span> = within 7 days.
+                Use <a href="@Url.Action("AllHearings","Hearing")" style="color:#1d6fa4;">All Hearings</a> to view completed records.
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-body" style="padding:16px 20px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;">
+            <div style="display:flex;flex-direction:column;gap:5px;flex:3;min-width:200px;">
+                <label class="filter-label">Search (File No / Claimant / Judge)</label>
+                <input type="text" id="querySearch" class="k-textbox"
+                       style="width:100%;max-width:300px;" placeholder="Search..." />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:155px;">
+                <label class="filter-label">Hearing Stage</label>
+                <select id="queryStageId" style="width:155px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:175px;">
+                <label class="filter-label">Court Venue</label>
+                <select id="queryVenueId" style="width:175px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:120px;">
+                <label class="filter-label">Date To</label>
+                <input type="text" id="dtTo" class="k-textbox" style="width:120px;" placeholder="dd/MM/yyyy" />
+            </div>
+            <div style="display:flex;gap:8px;padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="refreshGrid()">
+                    <i class="bi bi-search"></i> Search
+                </button>
+                <button class="btn-ptc-outline" onclick="clearFilters()">
+                    <i class="bi bi-x-circle"></i> Clear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Grid Card *@
+<div class="ptc-card">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title"><i class="bi bi-calendar-event"></i> Upcoming Court Dates</h2>
+        <span id="recordCount" class="record-count-badge">0 records</span>
+    </div>
+    <div class="ptc-card-body" style="padding:0;">
+        <div id="main_grid"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+var allStages = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.HearingStages));
+var allVenues = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.CourtVenues));
+
+$(function () {
+    kendo.culture('en-GB');
+
+    $('#queryStageId').kendoDropDownList({
+        dataTextField: 'StageDescription', dataValueField: 'Id', optionLabel: 'All Stages',
+        dataSource: (allStages || []).map(function(s){
+            return { Id: s.Id, StageDescription: s.StageCode + ' — ' + s.StageDescription };
+        })
+    });
+    $('#queryVenueId').kendoDropDownList({
+        dataTextField: 'VenueName', dataValueField: 'Id', optionLabel: 'All Venues',
+        dataSource: allVenues || []
+    });
+    $('#dtTo').kendoDatePicker({ format: 'dd/MM/yyyy', culture: 'en-GB' });
+    $('#querySearch').on('keypress', function(e){ if(e.which===13) refreshGrid(); });
+
+    var isMobile = window.innerWidth <= 576;
+
+    $('#main_grid').kendoGrid({
+        dataSource: {
+            transport: {
+                read: { url: '@Url.Action("HearingRead","Hearing")', type: 'POST' },
+                parameterMap: function (data, operation) {
+                    var token = $('input[name="__RequestVerificationToken"]').val();
+                    if (operation === 'read')
+                        return $.extend({}, data, getFilters(), { scope: 'upcoming', __RequestVerificationToken: token });
+                    return $.extend({}, data, { __RequestVerificationToken: token });
+                }
+            },
+            schema: {
+                data: 'Data', total: 'Total', errors: 'Errors',
+                model: {
+                    id: 'Id',
+                    fields: {
+                        Id:            { type: 'number', editable: false },
+                        ScheduledDate: { type: 'date' },
+                        IsCompleted:   { type: 'boolean' }
+                    }
+                }
+            },
+            pageSize: 15, serverPaging: true, serverSorting: true,
+            sort: { field: 'ScheduledDate', dir: 'asc' },
+            requestEnd: function (e) {
+                if (e.type === 'read' && e.response) {
+                    var t = e.response.Total || 0;
+                    $('#recordCount').text(t + ' record' + (t !== 1 ? 's' : ''));
+                    computeUpcomingStats(e.response.Data || []);
+                }
+            },
+            error: function (e) { handleGridError(e); }
+        },
+
+        columns: [
+            { field: 'Id', hidden: true },
+            {
+                // Urgency indicator column
+                title: '', width: 8, sortable: false,
+                template: function (d) {
+                    if (!d.ScheduledDate) return '';
+                    var dt   = kendo.parseDate(d.ScheduledDate);
+                    var days = dt ? Math.ceil((dt - new Date()) / 86400000) : null;
+                    var color = days === 0 ? '#dc2626' : (days !== null && days <= 7 ? '#d97706' : '#e2e8f0');
+                    return '<div style="width:4px;height:36px;border-radius:2px;background:' + color + ';margin:0 auto;"></div>';
+                }
+            },
+            {
+                field: 'ScheduledDate', title: 'Hearing Date', width: 155,
+                template: function (d) {
+                    if (!d.ScheduledDate) return '<span style="color:#94a3b8;">—</span>';
+                    var dt   = kendo.parseDate(d.ScheduledDate);
+                    var days = dt ? Math.ceil((dt - new Date()) / 86400000) : null;
+                    var isToday = days === 0;
+                    var urgent  = days !== null && days > 0 && days <= 7;
+                    var color   = isToday ? 'color:#dc2626;font-weight:800;'
+                                : urgent  ? 'color:#d97706;font-weight:700;' : 'font-weight:600;';
+                    var badge   = isToday
+                        ? '<span style="background:#fee2e2;color:#991b1b;font-size:0.65rem;padding:1px 7px;border-radius:10px;font-weight:700;margin-left:6px;">TODAY</span>'
+                        : urgent
+                        ? '<span style="background:#fef3c7;color:#92400e;font-size:0.65rem;padding:1px 7px;border-radius:10px;margin-left:6px;">' + days + ' days</span>'
+                        : '';
+                    var timeStr = d.HearingTime
+                        ? '<div style="font-size:0.72rem;color:#64748b;margin-top:2px;"><i class="bi bi-clock" style="font-size:10px;"></i> ' + d.HearingTime.substring(0,5) + '</div>'
+                        : '';
+                    return '<span style="' + color + '">' + (dt ? kendo.toString(dt, 'dd/MM/yyyy') : '—') + '</span>' + badge + timeStr;
+                }
+            },
+            {
+                field: 'FileNumber', title: 'Case File', width: 175, sortable: true,
+                template: function (d) {
+                    return '<a href="@Url.Action("EditCase","Case")?id=' + d.CaseFileId
+                         + '" style="font-family:monospace;font-weight:700;font-size:0.83rem;color:#1d6fa4;">'
+                         + kendo.htmlEncode(d.FileNumber || '') + '</a>'
+                         + '<div style="font-size:0.71rem;color:#64748b;margin-top:1px;">'
+                         + kendo.htmlEncode(d.ClaimantName || '') + '</div>';
+                }
+            },
+            {
+                field: 'StageCode', title: 'Stage', width: 145, sortable: true,
+                template: function (d) {
+                    if (!d.StageCode) return '<span style="color:#94a3b8;">—</span>';
+                    return '<span style="font-family:monospace;font-weight:700;font-size:0.82rem;'
+                         + 'background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:20px;">'
+                         + kendo.htmlEncode(d.StageCode) + '</span>'
+                         + '<div style="font-size:0.71rem;color:#64748b;margin-top:2px;">'
+                         + kendo.htmlEncode(d.StageDescription || '') + '</div>';
+                }
+            },
+            {
+                field: 'VenueName', title: 'Court Venue', width: 210, sortable: false,
+                template: function (d) {
+                    if (!d.VenueName) return '<span style="color:#94a3b8;">—</span>';
+                    var room = d.CourtroomNumber
+                        ? '<span style="font-size:0.71rem;color:#64748b;"> · Room ' + kendo.htmlEncode(d.CourtroomNumber) + '</span>'
+                        : '';
+                    return '<span style="font-size:0.83rem;">' + kendo.htmlEncode(d.VenueName) + '</span>' + room;
+                }
+            },
+            {
+                field: 'PresidingJudge', title: 'Judge / Magistrate', width: 165, hidden: isMobile, sortable: false,
+                template: function (d) {
+                    return d.PresidingJudge
+                        ? '<span style="font-size:0.83rem;">' + kendo.htmlEncode(d.PresidingJudge) + '</span>'
+                        : '<span style="color:#94a3b8;">—</span>';
+                }
+            },
+            {
+                title: 'Actions', width: 145, sortable: false,
+                template: function (d) {
+                    var editUrl = '@Url.Action("EditHearing","Hearing")?id=' + d.Id;
+                    return '<div style="display:flex;align-items:center;gap:4px;">'
+                         + '<a href="' + editUrl + '" class="btn btn-sm" style="padding:3px 10px;font-size:12px;background:#e0e7ff;border:none;color:#3730a3;" title="Edit"><i class="bi bi-pencil"></i></a>'
+                         + '<button onclick="quickComplete(' + d.Id + ')" '
+                         + 'style="border:none;background:transparent;color:#16a34a;font-size:14px;cursor:pointer;padding:3px 8px;" '
+                         + 'title="Mark Complete"><i class="bi bi-check-circle"></i></button>'
+                         + '<button onclick="deleteHearing(' + d.Id + ')" '
+                         + 'style="border:none;background:transparent;color:#dc2626;font-size:14px;cursor:pointer;padding:3px 6px;" '
+                         + 'title="Delete"><i class="bi bi-trash3"></i></button>'
+                         + '</div>';
+                }
+            }
+        ],
+
+        editable: false,
+        pageable: { pageSize: 15, pageSizes: [15, 30, 50], buttonCount: 5 },
+        sortable: true, scrollable: true, height: 540,
+        dataBound: function () {
+            this.thead.find('th').css({ background:'#f8fafc','font-weight':'600','font-size':'0.77rem',color:'#475569','border-color':'#e2e8f0' });
+        }
+    });
+
+    refreshGrid();
+});
+
+function computeUpcomingStats(rows) {
+    var today = new Date(); today.setHours(0,0,0,0);
+    var w7    = new Date(today); w7.setDate(w7.getDate() + 7);
+    var w30   = new Date(today); w30.setDate(w30.getDate() + 30);
+
+    var todayCount = 0, weekCount = 0, monthCount = 0;
+    rows.forEach(function(r) {
+        if (!r.ScheduledDate) return;
+        var dt = new Date(r.ScheduledDate); dt.setHours(0,0,0,0);
+        if (dt.getTime() === today.getTime()) todayCount++;
+        if (dt <= w7)  weekCount++;
+        if (dt <= w30) monthCount++;
+    });
+    $('#uStatToday').text(todayCount);
+    $('#uStatWeek').text(weekCount);
+    $('#uStatMonth').text(monthCount);
+    $('#uStatPending').text(rows.length);
+}
+
+function getFilters() {
+    var dpTo = $('#dtTo').data('kendoDatePicker');
+    return {
+        search:  $('#querySearch').val().trim(),
+        stageId: $('#queryStageId').data('kendoDropDownList') ? $('#queryStageId').data('kendoDropDownList').value() : '',
+        venueId: $('#queryVenueId').data('kendoDropDownList') ? $('#queryVenueId').data('kendoDropDownList').value() : '',
+        dateTo:  dpTo && dpTo.value() ? dpTo.value().toISOString() : ''
+    };
+}
+function refreshGrid() {
+    var g = $('#main_grid').data('kendoGrid');
+    if (g) g.dataSource.query({ page: 1, pageSize: g.dataSource.pageSize(), sort: g.dataSource.sort() });
+}
+function clearFilters() {
+    $('#querySearch').val('');
+    ['#queryStageId','#queryVenueId'].forEach(function(id){ var d=$(id).data('kendoDropDownList'); if(d) d.value(''); });
+    var t=$('#dtTo').data('kendoDatePicker'); if(t) t.value(null);
+    refreshGrid();
+}
+function exportGrid() { var g=$('#main_grid').data('kendoGrid'); if(g){ g.saveAsExcel(); KSwal.toast('info','Exporting...'); } }
+
+function quickComplete(id) {
+    KSwal.confirm('Mark Complete?', 'Record the outcome for this hearing and mark it as completed.',
+        'Yes, Complete It', function () {
+            Swal.fire({
+                title: 'Hearing Outcome',
+                input: 'textarea',
+                inputPlaceholder: 'e.g. Adjourned to next mention. Next date TBD.',
+                inputAttributes: { rows: 3 },
+                showCancelButton: true,
+                confirmButtonText: 'Save',
+                confirmButtonColor: '#16a34a'
+            }).then(function(result) {
+                if (!result.isConfirmed) return;
+                $.post('@Url.Action("HearingQuickComplete","Hearing")',
+                    { id: id, outcome: result.value || '',
+                      __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val() },
+                    function (r) {
+                        if (r && !r.Errors) { KSwal.toast('success', 'Hearing marked complete.'); refreshGrid(); }
+                        else { KSwal.error('Error', 'Failed to update hearing.'); }
+                    });
+            });
+        });
+}
+
+function deleteHearing(id) {
+    KSwal.confirmDelete('Delete Hearing?', 'Permanently remove this pending hearing record?', function () {
+        var grid = $('#main_grid').data('kendoGrid');
+        var item = grid.dataSource.get(id);
+        if (item) { grid.dataSource.remove(item); grid.dataSource.sync(); }
+    });
+}
+function handleGridError(e) {
+    var msg='An error occurred.';
+    if(e.errors){ var p=[]; $.each(e.errors,function(k,v){ if(v.errors) p.push(v.errors.join('\n')); else if(typeof v==='string') p.push(v); }); if(p.length) msg=p.join('\n'); }
+    else if(e.xhr){ if(e.xhr.status===401) msg='Session expired.'; else if(e.xhr.status===403) msg='Access denied.'; else if(e.xhr.status===500) msg='Server error.'; }
+    KSwal.error('Grid Error', msg);
+}
+</script>
+}

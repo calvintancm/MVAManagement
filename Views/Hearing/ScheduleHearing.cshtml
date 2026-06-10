@@ -1,0 +1,275 @@
+@model MVAManagement.Models.MVA.HearingRecord
+@{
+    var isEdit = Model.Id > 0;
+    ViewData["Title"] = isEdit ? "Edit Hearing" : "Schedule Hearing";
+    ViewData["BreadcrumbSection"] = "Case Management";
+    ViewData["BreadcrumbPage"] = isEdit ? "Edit Hearing" : "Schedule Hearing";
+
+    var hearingStages = ViewBag.HearingStages as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var courtVenues   = ViewBag.CourtVenues   as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var caseFiles     = ViewBag.CaseFiles     as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+
+    string formAction = isEdit
+        ? Url.Action("HearingUpdate", "Hearing")
+        : Url.Action("HearingCreate", "Hearing");
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">@(isEdit ? "Edit Hearing Record" : "Schedule a Hearing")</h1>
+        <p class="page-subtitle">@(isEdit ? $"Editing hearing record #{Model.Id}" : "Add a new court date to a case file")</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="@Url.Action("AllHearings","Hearing")" class="btn-ptc-outline">
+            <i class="bi bi-arrow-left"></i> Back to All Hearings
+        </a>
+    </div>
+</div>
+
+@if (TempData["Error"] != null)
+{
+    <div class="ptc-alert-danger mb-3"><i class="bi bi-exclamation-triangle-fill"></i> @TempData["Error"]</div>
+}
+
+<form method="post" action="@formAction" id="hearingForm" autocomplete="off">
+    @Html.AntiForgeryToken()
+    @if (isEdit)
+    {
+        <input type="hidden" name="Id" value="@Model.Id" />
+        <input type="hidden" name="CreatedAt" value="@Model.CreatedAt.ToString("o")" />
+    }
+
+    @* ── SECTION 1: Case File Link ────────────────────────────────────── *@
+    <div class="ptc-card mb-3">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-folder2-open"></i> Case File</h2>
+        </div>
+        <div class="ptc-card-body" style="padding:20px 24px;">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Case File <span class="text-danger">*</span></label>
+                    @if (isEdit)
+                    {
+                        @* Show file number read-only when editing — changing the case file of an existing hearing is not allowed *@
+                        <div class="k-textbox" style="background:#f8fafc;font-family:monospace;font-weight:700;color:#1d6fa4;">
+                            @(Model.CaseFile?.FileNumber ?? $"Case #{Model.CaseFileId}")
+                            @if (Model.CaseFile != null)
+                            {
+                                <span style="font-family:inherit;font-weight:400;color:#64748b;margin-left:10px;">
+                                    — @Model.CaseFile.PrimaryClaimantName
+                                </span>
+                            }
+                        </div>
+                        <input type="hidden" name="CaseFileId" value="@Model.CaseFileId" />
+                    }
+                    else
+                    {
+                        <select id="ddlCaseFile" style="width:100%;"></select>
+                        <small class="text-muted">Only active, open case files are listed</small>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── SECTION 2: Hearing Classification ──────────────────────────── *@
+    <div class="ptc-card mb-3">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-bank2"></i> Hearing Classification</h2>
+        </div>
+        <div class="ptc-card-body" style="padding:20px 24px;">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Hearing Stage <span class="text-danger">*</span></label>
+                    <select id="ddlHearingStage" style="width:100%;"></select>
+                    <small class="text-muted">E.g. Mention (M), Full Hearing (H), Case Management (CM)</small>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Court Venue</label>
+                    <select id="ddlCourtVenue" style="width:100%;"></select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label fw-semibold">Courtroom / Chamber</label>
+                    <input type="text" name="CourtroomNumber" class="k-textbox w-100"
+                           value="@Model.CourtroomNumber" placeholder="e.g. 3A" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label fw-semibold">Presiding Judge</label>
+                    <input type="text" name="PresidingJudge" class="k-textbox w-100"
+                           value="@Model.PresidingJudge" placeholder="YA / YH name" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── SECTION 3: Scheduling ────────────────────────────────────────── *@
+    <div class="ptc-card mb-3">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-calendar-date"></i> Scheduling</h2>
+        </div>
+        <div class="ptc-card-body" style="padding:20px 24px;">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Scheduled Date <span class="text-danger">*</span></label>
+                    <input type="text" id="dtScheduled" name="ScheduledDate" class="k-textbox w-100"
+                           value="@(Model.ScheduledDate != default ? Model.ScheduledDate.ToString("dd/MM/yyyy") : "")"
+                           placeholder="dd/MM/yyyy" required />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Hearing Time</label>
+                    <input type="text" id="tpHearingTime" name="HearingTime" class="k-textbox w-100"
+                           value="@(Model.HearingTime.HasValue ? Model.HearingTime.Value.ToString(@"hh\:mm") : "")"
+                           placeholder="HH:mm (24h)" maxlength="5" />
+                    <small class="text-muted">24-hour format, e.g. 09:00</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── SECTION 4: Outcome (shown for edit or completed records) ─────── *@
+    <div class="ptc-card mb-3" id="outcomeSection">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-clipboard2-check"></i> Outcome &amp; Progress Notes</h2>
+            @if (!isEdit)
+            {
+                <span style="font-size:0.76rem;color:#94a3b8;font-style:italic;">Optional — fill in after the hearing</span>
+            }
+        </div>
+        <div class="ptc-card-body" style="padding:20px 24px;">
+            <div class="row g-3">
+                <div class="col-md-12">
+                    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:14px;">
+                        <input type="checkbox" name="IsCompleted" id="chkCompleted" value="true"
+                               @(Model.IsCompleted ? "checked" : "")
+                               style="width:16px;height:16px;" />
+                        <input type="hidden" name="IsCompleted" value="false" />
+                        <span class="fw-semibold" style="font-size:0.88rem;">Hearing Completed</span>
+                        <span style="font-size:0.78rem;color:#64748b;">— tick this after the hearing has been conducted</span>
+                    </label>
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label fw-semibold">Hearing Outcome</label>
+                    <input type="text" name="HearingOutcome" class="k-textbox w-100"
+                           value="@Model.HearingOutcome"
+                           placeholder="e.g. Adjourned to next mention. Consent judgement entered." />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Adjourned To Date</label>
+                    <input type="text" id="dtAdjourned" class="k-textbox w-100"
+                           value="@(Model.AdjournedToDate.HasValue ? Model.AdjournedToDate.Value.ToString("dd/MM/yyyy") : "")"
+                           placeholder="dd/MM/yyyy" />
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label fw-semibold">Progress Notes</label>
+                    <textarea name="ProgressNotes" class="k-textbox w-100" rows="4"
+                              placeholder="Detailed record of what transpired during the hearing — attendance, orders made, directions given...">@Model.ProgressNotes</textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── Submit Bar ───────────────────────────────────────────────────── *@
+    <div style="display:flex;align-items:center;gap:12px;justify-content:flex-end;padding-bottom:24px;">
+        <a href="@Url.Action("AllHearings","Hearing")" class="btn-ptc-outline">
+            <i class="bi bi-x-circle"></i> Cancel
+        </a>
+        <button type="submit" class="btn-ptc-primary" id="btnSubmit">
+            <i class="bi @(isEdit ? "bi-floppy2" : "bi-calendar-plus")"></i>
+            @(isEdit ? "Save Changes" : "Schedule Hearing")
+        </button>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+var allHearingStages = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.HearingStages));
+var allCourtVenues   = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.CourtVenues));
+var allCaseFiles     = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.CaseFiles));
+
+$(function () {
+    kendo.culture('en-GB');
+
+    // ── Case file dropdown (create only) ──────────────────────────────
+    @if (!isEdit)
+    {
+        <text>
+        var cfSource = (allCaseFiles || []).map(function(c){
+            return { text: c.FileNumber + ' — ' + c.PrimaryClaimantName, value: c.Id };
+        });
+        $('#ddlCaseFile').kendoDropDownList({
+            dataTextField: 'text', dataValueField: 'value',
+            dataSource: cfSource, optionLabel: '— Select Case File —',
+            filter: 'contains'
+        });
+        </text>
+    }
+
+    // ── Hearing Stage dropdown ────────────────────────────────────────
+    var stageSource = (allHearingStages || []).map(function(s){
+        return { text: s.StageCode + ' — ' + s.StageDescription, value: s.Id };
+    });
+    $('#ddlHearingStage').kendoDropDownList({
+        dataTextField: 'text', dataValueField: 'value',
+        dataSource: stageSource, optionLabel: '— Select Stage —',
+        value: @(Model.HearingStageId > 0 ? Model.HearingStageId.ToString() : "null")
+    });
+
+    // ── Court Venue dropdown ──────────────────────────────────────────
+    var venueSource = (allCourtVenues || []).map(function(v){
+        return { text: v.VenueCode ? v.VenueName + ' (' + v.VenueCode + ')' : v.VenueName, value: v.Id };
+    });
+    $('#ddlCourtVenue').kendoDropDownList({
+        dataTextField: 'text', dataValueField: 'value',
+        dataSource: venueSource, optionLabel: '— Select Venue —',
+        value: @(Model.CourtVenueId.HasValue ? Model.CourtVenueId.Value.ToString() : "null")
+    });
+
+    // ── Date pickers ──────────────────────────────────────────────────
+    $('#dtScheduled').kendoDatePicker({ format: 'dd/MM/yyyy', culture: 'en-GB' });
+    $('#dtAdjourned').kendoDatePicker({ format: 'dd/MM/yyyy', culture: 'en-GB' });
+
+    // ── Time field — basic HH:mm mask ─────────────────────────────────
+    $('#tpHearingTime').on('blur', function () {
+        var val = $(this).val().trim();
+        if (val && !/^\d{2}:\d{2}$/.test(val)) {
+            KSwal.toast('warning', 'Use HH:mm 24-hour format, e.g. 14:30');
+            $(this).val('');
+        }
+    });
+
+    // ── Prevent duplicate submit ──────────────────────────────────────
+    $('#hearingForm').on('submit', function () {
+        // Inject Kendo dropdown values
+        $('input[name="HearingStageId"]').remove();
+        $('input[name="CourtVenueId"]').remove();
+        @if (!isEdit)
+        {
+            <text>$('input[name="CaseFileId"]').remove();</text>
+        }
+
+        var inject = function(name, val) {
+            $('<input type="hidden">').attr('name', name).val(val || '').appendTo('#hearingForm');
+        };
+
+        inject('HearingStageId', $('#ddlHearingStage').data('kendoDropDownList').value());
+        inject('CourtVenueId',   $('#ddlCourtVenue').data('kendoDropDownList').value());
+        @if (!isEdit)
+        {
+            <text>inject('CaseFileId', $('#ddlCaseFile').data('kendoDropDownList').value());</text>
+        }
+
+        // Fix date fields
+        var fixDate = function(inputId, fieldName) {
+            $('input[name="' + fieldName + '"]').remove();
+            var dp  = $('#' + inputId).data('kendoDatePicker');
+            var val = dp && dp.value() ? dp.value().toISOString() : '';
+            $('<input type="hidden">').attr('name', fieldName).val(val).appendTo('#hearingForm');
+        };
+        fixDate('dtScheduled', 'ScheduledDate');
+        fixDate('dtAdjourned',  'AdjournedToDate');
+
+        $('#btnSubmit').prop('disabled', true).html('<i class="bi bi-hourglass-split"></i> Saving...');
+    });
+});
+</script>
+}
