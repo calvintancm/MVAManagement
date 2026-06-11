@@ -13,8 +13,10 @@ namespace MVAManagement.Models.MVA
         /// <summary>Foreign key linking this journal entry to its parent case file.</summary>
         public int CaseFileId { get; set; }
 
+        public int AuthorId { get; set; }
+
         /// <summary>Foreign key to the caseworker who authored this entry.</summary>
-        public int AuthorCaseworkerId { get; set; }
+        // public int AuthorCaseworkerId { get; set; }
 
         // ── ENTRY CONTENT ─────────────────────────────────────────────────────
 

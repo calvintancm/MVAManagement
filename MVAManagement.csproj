@@ -21,6 +21,7 @@
     <Folder Include="Views\Access\" />
     <Folder Include="Views\Case\" />
     <Folder Include="Views\Hearing\" />
+    <Folder Include="Views\Claims\" />
   </ItemGroup>
 
 </Project>

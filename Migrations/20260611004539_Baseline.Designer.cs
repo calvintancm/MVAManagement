@@ -4,6 +4,7 @@ using MVAManagement.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace MVAManagement.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260611004539_Baseline")]
+    partial class Baseline
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -731,15 +734,12 @@ namespace MVAManagement.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
 
-                    b.Property<bool>("IsMandatory")
-                        .HasColumnType("bit");
-
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
 
-                    b.ToTable("DisbursementCategory", (string)null);
+                    b.ToTable("DisbursementCategories", (string)null);
 
                     b.HasData(
                         new
@@ -750,7 +750,6 @@ namespace MVAManagement.Migrations
                             DisplayOrder = 1,
                             HexColor = "#185FA5",
                             IsActive = true,
-                            IsMandatory = true,
                             UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
@@ -761,7 +760,6 @@ namespace MVAManagement.Migrations
                             DisplayOrder = 2,
                             HexColor = "#0EA5E9",
                             IsActive = true,
-                            IsMandatory = true,
                             UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
@@ -772,7 +770,6 @@ namespace MVAManagement.Migrations
                             DisplayOrder = 3,
                             HexColor = "#7C3AED",
                             IsActive = true,
-                            IsMandatory = true,
                             UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
@@ -783,7 +780,6 @@ namespace MVAManagement.Migrations
                             DisplayOrder = 4,
                             HexColor = "#DC2626",
                             IsActive = true,
-                            IsMandatory = true,
                             UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
@@ -794,7 +790,6 @@ namespace MVAManagement.Migrations
                             DisplayOrder = 5,
                             HexColor = "#D97706",
                             IsActive = true,
-                            IsMandatory = true,
                             UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
@@ -805,7 +800,6 @@ namespace MVAManagement.Migrations
                             DisplayOrder = 6,
                             HexColor = "#059669",
                             IsActive = true,
-                            IsMandatory = true,
                             UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
@@ -816,7 +810,6 @@ namespace MVAManagement.Migrations
                             DisplayOrder = 7,
                             HexColor = "#DB2777",
                             IsActive = true,
-                            IsMandatory = true,
                             UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
@@ -827,7 +820,6 @@ namespace MVAManagement.Migrations
                             DisplayOrder = 8,
                             HexColor = "#64748B",
                             IsActive = true,
-                            IsMandatory = true,
                             UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
@@ -838,7 +830,6 @@ namespace MVAManagement.Migrations
                             DisplayOrder = 9,
                             HexColor = "#94A3B8",
                             IsActive = true,
-                            IsMandatory = true,
                             UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });

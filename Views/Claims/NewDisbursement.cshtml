@@ -1,0 +1,281 @@
+@model MVAManagement.Models.MVA.CaseDisbursement
+@{
+    var isEdit = Model.Id > 0;
+    ViewData["Title"]              = isEdit ? "Edit Disbursement" : "New Disbursement";
+    ViewData["BreadcrumbSection"]  = "Case Management";
+    ViewData["BreadcrumbPage"]     = isEdit ? "Edit Disbursement" : "New Disbursement";
+
+    var caseFiles   = ViewBag.CaseFiles   as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var categories  = ViewBag.DisbursementCategories as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+
+    string formAction = isEdit
+        ? Url.Action("DisbursementUpdate", "Claims")
+        : Url.Action("DisbursementCreate", "Claims");
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">@(isEdit ? "Edit Disbursement" : "Record New Disbursement")</h1>
+        <p class="page-subtitle">@(isEdit ? $"Editing disbursement #{Model.Id}" : "Add a recoverable expense to a case file")</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="@Url.Action("Disbursements","Claims")" class="btn-ptc-outline">
+            <i class="bi bi-arrow-left"></i> Back to Disbursements
+        </a>
+    </div>
+</div>
+
+@if (TempData["Error"] != null)
+{
+    <div class="ptc-alert-danger mb-3"><i class="bi bi-exclamation-triangle-fill"></i> @TempData["Error"]</div>
+}
+
+<form method="post" action="@formAction" id="disbForm" autocomplete="off">
+    @Html.AntiForgeryToken()
+    @if (isEdit)
+    {
+        <input type="hidden" name="Id"        value="@Model.Id" />
+        <input type="hidden" name="CreatedAt" value="@Model.CreatedAt.ToString("o")" />
+    }
+
+    @* ── SECTION 1: Case File Link ────────────────────────────────────── *@
+    <div class="ptc-card mb-3">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-folder2-open"></i> Case File</h2>
+        </div>
+        <div class="ptc-card-body" style="padding:20px 24px;">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Case File <span class="text-danger">*</span></label>
+                    @if (isEdit)
+                    {
+                        <div class="k-textbox" style="background:#f8fafc;font-family:monospace;font-weight:700;color:#1d6fa4;">
+                            @(Model.CaseFile?.FileNumber ?? $"Case #{Model.CaseFileId}")
+                            @if (Model.CaseFile != null)
+                            {
+                                <span style="font-family:inherit;font-weight:400;color:#64748b;margin-left:10px;">
+                                    — @Model.CaseFile.PrimaryClaimantName
+                                </span>
+                            }
+                        </div>
+                        <input type="hidden" name="CaseFileId" value="@Model.CaseFileId" />
+                    }
+                    else
+                    {
+                        <select id="ddlCaseFile" style="width:100%;"></select>
+                        <small class="text-muted">Select the case this expense belongs to</small>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── SECTION 2: Disbursement Details ──────────────────────────────── *@
+    <div class="ptc-card mb-3">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-receipt"></i> Disbursement Details</h2>
+        </div>
+        <div class="ptc-card-body" style="padding:20px 24px;">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Disbursement Date <span class="text-danger">*</span></label>
+                    <input type="text" id="dtDisbDate" class="k-textbox w-100"
+                           value="@(Model.DisbursementDate != default ? Model.DisbursementDate.ToString("dd/MM/yyyy") : "")"
+                           placeholder="dd/MM/yyyy" required />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Category <span class="text-danger">*</span></label>
+                    <select id="ddlCategory" style="width:100%;"></select>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label fw-semibold">Description <span class="text-danger">*</span></label>
+                    <input type="text" name="Description" class="k-textbox w-100" required
+                           value="@Model.Description"
+                           placeholder="e.g. Specialist report fee — Dr. Suresh, Pantai KL (Orthopaedic)" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Payee <span class="text-danger">*</span></label>
+                    <input type="text" name="Payee" class="k-textbox w-100" required
+                           value="@Model.Payee"
+                           placeholder="Doctor, court registry, courier, etc." />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Amount (MYR) <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <span class="input-group-text" style="font-size:13px;background:#f8fafc;border-color:#e2e8f0;">RM</span>
+                        <input type="number" name="Amount" class="k-textbox" required
+                               style="border-left:none;flex:1;"
+                               value="@(Model.Amount > 0 ? Model.Amount.ToString("F2") : "")"
+                               step="0.01" min="0.01" placeholder="0.00" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── SECTION 3: Payment Details ───────────────────────────────────── *@
+    <div class="ptc-card mb-3">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-credit-card-2-front"></i> Payment Details</h2>
+        </div>
+        <div class="ptc-card-body" style="padding:20px 24px;">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Payment Method</label>
+                    <select id="ddlPaymentMethod" style="width:100%;"></select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Payment Reference</label>
+                    <input type="text" name="PaymentReference" class="k-textbox w-100"
+                           value="@Model.PaymentReference"
+                           placeholder="Cheque no. / transaction ref." />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Receipt / Invoice No.</label>
+                    <input type="text" name="ReceiptNumber" class="k-textbox w-100"
+                           value="@Model.ReceiptNumber"
+                           placeholder="Receipt or invoice number" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Recorded By</label>
+                    <input type="text" name="RecordedBy" class="k-textbox w-100"
+                           value="@Model.RecordedBy"
+                           placeholder="Staff username or name" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── SECTION 4: Recovery Status ───────────────────────────────────── *@
+    <div class="ptc-card mb-4">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-arrow-repeat"></i> Recovery Status</h2>
+            <span style="font-size:0.76rem;color:#94a3b8;font-style:italic;">Update after cost is recovered from defendant / insurer</span>
+        </div>
+        <div class="ptc-card-body" style="padding:20px 24px;">
+            <div class="row g-3">
+                <div class="col-md-12" style="display:flex;align-items:center;gap:16px;">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                        <input type="checkbox" name="IsRecovered" id="chkRecovered" value="true"
+                               @(Model.IsRecovered ? "checked" : "")
+                               style="width:16px;height:16px;" />
+                        <input type="hidden" name="IsRecovered" value="false" />
+                        <span class="fw-semibold" style="font-size:0.88rem;">Cost Recovered</span>
+                    </label>
+                    <div id="recoveredDateWrapper" style="display:@(Model.IsRecovered ? "flex" : "none");flex-direction:column;gap:4px;">
+                        <label class="form-label fw-semibold mb-0" style="font-size:0.82rem;">Recovered Date</label>
+                        <input type="text" id="dtRecovered" class="k-textbox"
+                               style="width:150px;"
+                               value="@(Model.RecoveredDate.HasValue ? Model.RecoveredDate.Value.ToString("dd/MM/yyyy") : "")"
+                               placeholder="dd/MM/yyyy" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── Submit Bar ───────────────────────────────────────────────────── *@
+    <div style="display:flex;align-items:center;gap:12px;justify-content:flex-end;padding-bottom:24px;">
+        <a href="@Url.Action("Disbursements","Claims")" class="btn-ptc-outline">
+            <i class="bi bi-x-circle"></i> Cancel
+        </a>
+        <button type="submit" class="btn-ptc-primary" id="btnSubmit">
+            <i class="bi @(isEdit ? "bi-floppy2" : "bi-receipt")"></i>
+            @(isEdit ? "Save Changes" : "Record Disbursement")
+        </button>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+var allCaseFiles  = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.CaseFiles));
+var allCategories = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.DisbursementCategories));
+
+$(function () {
+    kendo.culture('en-GB');
+
+    // ── Case file dropdown (create only) ──────────────────────────────
+    @if (!isEdit)
+    {
+        <text>
+        var cfSource = (allCaseFiles || []).map(function(c){
+            return { text: c.FileNumber + ' — ' + c.PrimaryClaimantName, value: c.Id };
+        });
+        $('#ddlCaseFile').kendoDropDownList({
+            dataTextField: 'text', dataValueField: 'value',
+            dataSource: cfSource, optionLabel: '— Select Case File —',
+            filter: 'contains'
+        });
+        </text>
+    }
+
+    // ── Category dropdown ─────────────────────────────────────────────
+    var catSource = (allCategories || []).map(function(c){ return c.CategoryName; });
+    // Fallback built-in list if master table is empty
+    if (!catSource.length) {
+        catSource = ['Medical Report Fee','Specialist Examination Fee','Court Filing Fee',
+                     'Police Report Fee','Process Server Fee','Expert Witness Fee',
+                     'Interpreter Fee','Postage / Courier','Miscellaneous'];
+    }
+    $('#ddlCategory').kendoDropDownList({
+        dataSource: catSource,
+        value: '@Html.Raw(Model.DisbursementCategory ?? "Miscellaneous")'
+    });
+
+    // ── Payment method dropdown ───────────────────────────────────────
+    $('#ddlPaymentMethod').kendoDropDownList({
+        dataSource: ['Cheque','Online Transfer','Cash','Credit Card'],
+        optionLabel: '— Select —',
+        value: '@Html.Raw(Model.PaymentMethod ?? "")'
+    });
+
+    // ── Date pickers ──────────────────────────────────────────────────
+    $('#dtDisbDate').kendoDatePicker({ format: 'dd/MM/yyyy', culture: 'en-GB' });
+    $('#dtRecovered').kendoDatePicker({ format: 'dd/MM/yyyy', culture: 'en-GB' });
+
+    // ── Toggle recovered date visibility ─────────────────────────────
+    $('#chkRecovered').on('change', function () {
+        if ($(this).is(':checked')) {
+            $('#recoveredDateWrapper').show();
+            if (!$('#dtRecovered').val()) {
+                $('#dtRecovered').data('kendoDatePicker').value(new Date());
+            }
+        } else {
+            $('#recoveredDateWrapper').hide();
+        }
+    });
+
+    // ── Submit guard ──────────────────────────────────────────────────
+    $('#disbForm').on('submit', function () {
+        $('input[name="DisbursementCategory"]').remove();
+        $('input[name="PaymentMethod"]').remove();
+        @if (!isEdit)
+        {
+            <text>$('input[name="CaseFileId"]').remove();</text>
+        }
+
+        var inject = function(name, val) {
+            $('<input type="hidden">').attr('name', name).val(val || '').appendTo('#disbForm');
+        };
+
+        inject('DisbursementCategory', $('#ddlCategory').data('kendoDropDownList').value());
+        inject('PaymentMethod',        $('#ddlPaymentMethod').data('kendoDropDownList').value());
+        @if (!isEdit)
+        {
+            <text>inject('CaseFileId', $('#ddlCaseFile').data('kendoDropDownList').value());</text>
+        }
+
+        var fixDate = function(inputId, fieldName) {
+            $('input[name="' + fieldName + '"]').remove();
+            var dp  = $('#' + inputId).data('kendoDatePicker');
+            var val = dp && dp.value() ? dp.value().toISOString() : '';
+            $('<input type="hidden">').attr('name', fieldName).val(val).appendTo('#disbForm');
+        };
+        fixDate('dtDisbDate',  'DisbursementDate');
+        fixDate('dtRecovered', 'RecoveredDate');
+
+        $('#btnSubmit').prop('disabled', true).html('<i class="bi bi-hourglass-split"></i> Saving...');
+    });
+});
+</script>
+}

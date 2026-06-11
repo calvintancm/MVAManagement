@@ -1,0 +1,370 @@
+@{
+    ViewData["Title"] = "Settlement Offers";
+    ViewData["BreadcrumbSection"] = "Case Management";
+    ViewData["BreadcrumbPage"] = "Settlement Offers";
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Settlement Offers</h1>
+        <p class="page-subtitle">Negotiation history — insurer offers and firm counter-offers across all case files</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-ptc-primary" onclick="openAddRow()">
+            <i class="bi bi-plus-lg"></i> Add Offer
+        </button>
+        <button class="btn-ptc-outline" onclick="exportGrid()">
+            <i class="bi bi-download"></i> Export
+        </button>
+    </div>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="ptc-alert-success mb-3"><i class="bi bi-check-circle-fill"></i> @TempData["Success"]</div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="ptc-alert-danger mb-3"><i class="bi bi-exclamation-triangle-fill"></i> @TempData["Error"]</div>
+}
+
+@* Stat strip *@
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;">
+    @foreach (var s in new[] {
+        new { Id="sStatTotal",    Label="Total Offers",    Icon="bi-chat-square-text", Color="#1d6fa4", Bg="#eff6ff" },
+        new { Id="sStatOpen",     Label="Open / Active",   Icon="bi-hourglass-split",  Color="#d97706", Bg="#fffbeb" },
+        new { Id="sStatAccepted", Label="Accepted",        Icon="bi-check-circle",     Color="#16a34a", Bg="#f0fdf4" },
+        new { Id="sStatDisb",     Label="Total Disbursed", Icon="bi-cash-stack",       Color="#7c3aed", Bg="#faf5ff" },
+    })
+    {
+        <div class="ptc-card" style="padding:14px 18px;display:flex;align-items:center;gap:12px;border-left:4px solid @s.Color;">
+            <div style="width:38px;height:38px;border-radius:10px;background:@s.Bg;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="bi @s.Icon" style="font-size:18px;color:@s.Color;"></i>
+            </div>
+            <div>
+                <div id="@s.Id" style="font-size:1.35rem;font-weight:700;line-height:1;color:#0f172a;">—</div>
+                <div style="font-size:0.72rem;color:#64748b;margin-top:3px;">@s.Label</div>
+            </div>
+        </div>
+    }
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-body" style="padding:16px 20px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;">
+            <div style="display:flex;flex-direction:column;gap:5px;flex:3;min-width:200px;">
+                <label class="filter-label">Search (File No / Claimant / Insurer Ref)</label>
+                <input type="text" id="querySearch" class="k-textbox"
+                       style="width:100%;max-width:300px;" placeholder="Search..." />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:150px;">
+                <label class="filter-label">Direction</label>
+                <select id="queryDirection" style="width:150px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:150px;">
+                <label class="filter-label">Offer Status</label>
+                <select id="queryStatus" style="width:150px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:120px;">
+                <label class="filter-label">Date From</label>
+                <input type="text" id="dtFrom" class="k-textbox" style="width:120px;" placeholder="dd/MM/yyyy" />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:120px;">
+                <label class="filter-label">Date To</label>
+                <input type="text" id="dtTo" class="k-textbox" style="width:120px;" placeholder="dd/MM/yyyy" />
+            </div>
+            <div style="display:flex;gap:8px;padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="refreshGrid()">
+                    <i class="bi bi-search"></i> Search
+                </button>
+                <button class="btn-ptc-outline" onclick="clearFilters()">
+                    <i class="bi bi-x-circle"></i> Clear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Grid Card *@
+<div class="ptc-card">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title"><i class="bi bi-currency-exchange"></i> Offer Register</h2>
+        <span id="recordCount" class="record-count-badge">0 records</span>
+    </div>
+    <div class="ptc-card-body" style="padding:0;">
+        <div id="main_grid"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+var allCaseFiles = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.CaseFiles));
+
+var offerDirections = ['From Insurer', 'Counter Offer'];
+var offerStatuses   = ['Open', 'Accepted', 'Rejected', 'Countered', 'Lapsed'];
+
+var statusStyleMap = {
+    'Open':       { bg:'#fef3c7', color:'#92400e' },
+    'Accepted':   { bg:'#dcfce7', color:'#166534' },
+    'Rejected':   { bg:'#fee2e2', color:'#991b1b' },
+    'Countered':  { bg:'#e0e7ff', color:'#3730a3' },
+    'Lapsed':     { bg:'#f1f5f9', color:'#475569' }
+};
+var dirStyleMap = {
+    'From Insurer': { bg:'#dbeafe', color:'#1d40ae' },
+    'Counter Offer':{ bg:'#fce7f3', color:'#9d174d' }
+};
+
+$(function () {
+    kendo.culture('en-GB');
+
+    $('#queryDirection').kendoDropDownList({
+        dataSource: offerDirections, optionLabel: 'All Directions'
+    });
+    $('#queryStatus').kendoDropDownList({
+        dataSource: offerStatuses, optionLabel: 'All Statuses'
+    });
+    $('#dtFrom, #dtTo').kendoDatePicker({ format: 'dd/MM/yyyy', culture: 'en-GB' });
+    $('#querySearch').on('keypress', function(e){ if(e.which===13) refreshGrid(); });
+
+    var isMobile = window.innerWidth <= 576;
+
+    var cfSource = (allCaseFiles || []).map(function(c){
+        return { text: c.FileNumber + ' — ' + c.PrimaryClaimantName, value: c.Id };
+    });
+
+    $('#main_grid').kendoGrid({
+        dataSource: {
+            transport: {
+                read:    { url: '@Url.Action("SettlementOfferRead",    "Claims")', type: 'POST' },
+                update:  { url: '@Url.Action("SettlementOfferUpdate",  "Claims")', type: 'POST' },
+                create:  { url: '@Url.Action("SettlementOfferCreate",  "Claims")', type: 'POST' },
+                destroy: { url: '@Url.Action("SettlementOfferDestroy", "Claims")', type: 'POST' },
+                parameterMap: function (data, operation) {
+                    var token = $('input[name="__RequestVerificationToken"]').val();
+                    if (operation === 'read')
+                        return $.extend({}, data, getFilters(), { __RequestVerificationToken: token });
+                    if (operation === 'create' || operation === 'update') {
+                        // CaseFileId hidden field set via DDL editor
+                        return $.extend({}, data, { __RequestVerificationToken: token });
+                    }
+                    return $.extend({}, data, { __RequestVerificationToken: token });
+                }
+            },
+            schema: {
+                data: 'Data', total: 'Total', errors: 'Errors',
+                model: {
+                    id: 'Id',
+                    fields: {
+                        Id:                      { type: 'number',  editable: false },
+                        CaseFileId:              { type: 'number',  validation: { required: true } },
+                        FileNumber:              { type: 'string',  editable: false },
+                        ClaimantName:            { type: 'string',  editable: false },
+                        OfferDate:               { type: 'date',    validation: { required: true } },
+                        OfferAmount:             { type: 'number',  validation: { required: true, min: 0 } },
+                        OfferDirection:          { type: 'string',  defaultValue: 'From Insurer' },
+                        OfferStatus:             { type: 'string',  defaultValue: 'Open' },
+                        OfferedBy:               { type: 'string'  },
+                        InsurerOfferReference:   { type: 'string'  },
+                        OfferExpiryDate:         { type: 'date'    },
+                        GeneralDamagesComponent: { type: 'number'  },
+                        SpecialDamagesComponent: { type: 'number'  },
+                        Notes:                   { type: 'string'  }
+                    }
+                }
+            },
+            pageSize: 15, serverPaging: true, serverSorting: true,
+            sort: { field: 'OfferDate', dir: 'desc' },
+            requestEnd: function (e) {
+                if (e.type === 'read' && e.response) {
+                    var t = e.response.Total || 0;
+                    $('#recordCount').text(t + ' record' + (t !== 1 ? 's' : ''));
+                }
+            },
+            error: function (e) { handleGridError(e); }
+        },
+
+        columns: [
+            { field: 'Id', hidden: true },
+            {
+                field: 'CaseFileId', title: 'Case File', width: 210,
+                template: function (d) {
+                    return '<a href="@Url.Action("EditCase","Case")?id=' + d.CaseFileId
+                         + '" style="font-family:monospace;font-weight:700;font-size:0.82rem;color:#1d6fa4;">'
+                         + kendo.htmlEncode(d.FileNumber || '') + '</a>'
+                         + '<div style="font-size:0.71rem;color:#64748b;margin-top:1px;">'
+                         + kendo.htmlEncode(d.ClaimantName || '') + '</div>';
+                },
+                editor: function (container, options) {
+                    $('<input name="CaseFileId" />')
+                        .appendTo(container)
+                        .kendoDropDownList({
+                            dataTextField: 'text', dataValueField: 'value',
+                            dataSource: cfSource,
+                            optionLabel: '— Select Case —',
+                            filter: 'contains',
+                            value: options.model.CaseFileId,
+                            change: function () { options.model.set('CaseFileId', this.value()); }
+                        });
+                }
+            },
+            {
+                field: 'OfferDate', title: 'Date', width: 110,
+                template: function (d) {
+                    var dt = kendo.parseDate(d.OfferDate);
+                    return dt ? kendo.toString(dt, 'dd/MM/yyyy') : '—';
+                }
+            },
+            {
+                field: 'OfferDirection', title: 'Direction', width: 130,
+                template: function (d) {
+                    var s = dirStyleMap[d.OfferDirection] || { bg:'#e2e8f0', color:'#475569' };
+                    return '<span style="background:' + s.bg + ';color:' + s.color
+                         + ';padding:2px 9px;border-radius:20px;font-size:0.71rem;font-weight:700;">'
+                         + kendo.htmlEncode(d.OfferDirection || '') + '</span>';
+                },
+                editor: function (container, options) {
+                    $('<input name="OfferDirection" />')
+                        .appendTo(container)
+                        .kendoDropDownList({
+                            dataSource: offerDirections,
+                            value: options.model.OfferDirection
+                        });
+                }
+            },
+            {
+                field: 'OfferAmount', title: 'Offer Amount (MYR)', width: 165,
+                attributes: { style: 'text-align:right;' },
+                template: function (d) {
+                    if (!d.OfferAmount) return '<span style="color:#94a3b8;">—</span>';
+                    var claimed = d.ClaimedAmount || 0;
+                    var pct = claimed > 0 ? ((d.OfferAmount / claimed) * 100).toFixed(0) : null;
+                    var pctBadge = pct ? ' <span style="font-size:0.68rem;color:#64748b;">(' + pct + '%)</span>' : '';
+                    return '<span style="font-variant-numeric:tabular-nums;font-weight:700;color:#0f172a;">RM '
+                         + kendo.toString(d.OfferAmount, 'n2') + '</span>' + pctBadge;
+                }
+            },
+            {
+                field: 'OfferStatus', title: 'Status', width: 105,
+                attributes: { style: 'text-align:center;' },
+                template: function (d) {
+                    var s = statusStyleMap[d.OfferStatus] || { bg:'#e2e8f0', color:'#475569' };
+                    return '<span style="background:' + s.bg + ';color:' + s.color
+                         + ';padding:2px 9px;border-radius:20px;font-size:0.71rem;font-weight:700;">'
+                         + kendo.htmlEncode(d.OfferStatus || '') + '</span>';
+                },
+                editor: function (container, options) {
+                    $('<input name="OfferStatus" />')
+                        .appendTo(container)
+                        .kendoDropDownList({
+                            dataSource: offerStatuses,
+                            value: options.model.OfferStatus
+                        });
+                }
+            },
+            {
+                field: 'OfferedBy', title: 'Offered By', width: 150, hidden: isMobile,
+                template: function (d) {
+                    return d.OfferedBy ? kendo.htmlEncode(d.OfferedBy) : '<span style="color:#94a3b8;">—</span>';
+                }
+            },
+            {
+                field: 'InsurerOfferReference', title: 'Insurer Ref.', width: 130, hidden: isMobile,
+                template: function (d) {
+                    return d.InsurerOfferReference
+                        ? '<span style="font-family:monospace;font-size:0.82rem;">' + kendo.htmlEncode(d.InsurerOfferReference) + '</span>'
+                        : '<span style="color:#94a3b8;">—</span>';
+                }
+            },
+            {
+                field: 'Notes', title: 'Notes', width: 200, hidden: isMobile,
+                template: function (d) {
+                    if (!d.Notes) return '<span style="color:#94a3b8;">—</span>';
+                    var t = d.Notes.length > 50 ? d.Notes.substring(0,50) + '…' : d.Notes;
+                    return '<span style="font-size:0.82rem;" title="' + kendo.htmlEncode(d.Notes) + '">' + kendo.htmlEncode(t) + '</span>';
+                }
+            },
+            {
+                command: [
+                    { name: 'edit',    text: { edit: ' Edit', update: ' Save', cancel: ' Cancel' } },
+                    {
+                        name: 'destroy', text: ' Delete',
+                        click: function (e) {
+                            e.preventDefault();
+                            var grid  = $('#main_grid').data('kendoGrid');
+                            var model = grid.dataItem($(e.target).closest('tr'));
+                            if (model.OfferStatus === 'Accepted') {
+                                KSwal.error('Cannot Delete', 'Accepted offers cannot be deleted — they form part of the settlement record.');
+                                return;
+                            }
+                            KSwal.confirmDelete('Delete Offer?',
+                                'Remove this <strong>' + model.OfferDirection + '</strong> of <strong>RM '
+                                + kendo.toString(model.OfferAmount, 'n2') + '</strong>?',
+                                function () { grid.dataSource.remove(model); grid.dataSource.sync(); }
+                            );
+                        }
+                    }
+                ],
+                title: 'Action', width: 200
+            }
+        ],
+
+        editable: 'inline',
+        pageable: { pageSize: 15, pageSizes: [15, 30, 50], buttonCount: 5 },
+        sortable: true, scrollable: true, height: 520,
+        dataBound: function () {
+            this.thead.find('th').css({ background:'#f8fafc','font-weight':'600','font-size':'0.77rem',color:'#475569','border-color':'#e2e8f0' });
+        },
+        save: function () { KSwal.toast('success', 'Offer saved.'); loadStats(); }
+    });
+
+    loadStats();
+    refreshGrid();
+});
+
+function loadStats() {
+    $.post('@Url.Action("ClaimsSummaryStats","Claims")',
+           { __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val() },
+           function (r) {
+               if (!r) return;
+               $('#sStatTotal').text(r.totalOffers    || 0);
+               $('#sStatOpen').text(r.openOffers      || 0);
+               $('#sStatAccepted').text(r.acceptedOffers || 0);
+               $('#sStatDisb').text('RM ' + kendo.toString(r.totalDisb || 0, 'n2'));
+           });
+}
+function getFilters() {
+    var dpFrom = $('#dtFrom').data('kendoDatePicker');
+    var dpTo   = $('#dtTo').data('kendoDatePicker');
+    return {
+        search:        $('#querySearch').val().trim(),
+        offerDirection:$('#queryDirection').data('kendoDropDownList') ? $('#queryDirection').data('kendoDropDownList').value() : '',
+        offerStatus:   $('#queryStatus').data('kendoDropDownList') ? $('#queryStatus').data('kendoDropDownList').value() : '',
+        dateFrom:      dpFrom && dpFrom.value() ? dpFrom.value().toISOString() : '',
+        dateTo:        dpTo   && dpTo.value()   ? dpTo.value().toISOString()   : ''
+    };
+}
+function refreshGrid() {
+    var g = $('#main_grid').data('kendoGrid');
+    if (g) g.dataSource.query({ page: 1, pageSize: g.dataSource.pageSize(), sort: g.dataSource.sort() });
+}
+function clearFilters() {
+    $('#querySearch').val('');
+    ['#queryDirection','#queryStatus'].forEach(function(id){ var d=$(id).data('kendoDropDownList'); if(d) d.value(''); });
+    var f=$('#dtFrom').data('kendoDatePicker'); if(f) f.value(null);
+    var t=$('#dtTo').data('kendoDatePicker');   if(t) t.value(null);
+    refreshGrid();
+}
+function openAddRow() { var g=$('#main_grid').data('kendoGrid'); if(g) g.addRow(); }
+function exportGrid()  { var g=$('#main_grid').data('kendoGrid'); if(g){ g.saveAsExcel(); KSwal.toast('info','Exporting...'); } }
+function handleGridError(e) {
+    var msg='An error occurred.';
+    if(e.errors){ var p=[]; $.each(e.errors,function(k,v){ if(v.errors) p.push(v.errors.join('\n')); else if(typeof v==='string') p.push(v); }); if(p.length) msg=p.join('\n'); }
+    else if(e.xhr){ if(e.xhr.status===401) msg='Session expired.'; else if(e.xhr.status===403) msg='Access denied.'; else if(e.xhr.status===500) msg='Server error.'; }
+    KSwal.error('Grid Error', msg);
+}
+</script>
+}

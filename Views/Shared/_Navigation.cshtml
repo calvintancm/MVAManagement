@@ -603,7 +603,7 @@
                 <button class="sb-nav-link" data-bs-toggle="collapse"
                         data-bs-target="#menuClaims" aria-expanded="false"
                         data-ptc-tooltip="Claims & Settlement">
-                    <span class="sb-nav-icon"><i class="bi bi-cash-stack"></i></span>
+                    <span class="sb-nav-icon"><i class="bi bi-currency-exchange"></i></span>
                     <span class="sb-nav-label">Claims &amp; Settlement</span>
                     <i class="bi bi-chevron-right sb-chevron"></i>
                 </button>
@@ -612,50 +612,50 @@
                     <li>
                         @if (isSolicitor)
                         {
-                            <a class="sb-nav-link" asp-controller="Settlement" asp-action="Index"
+                            <a class="sb-nav-link" asp-controller="Claims" asp-action="SettlementOffers"
                                data-ptc-tooltip="Settlement Offers">
-                                <span class="sb-nav-icon"><i class="bi bi-handshake"></i></span>
+                                <span class="sb-nav-icon"><i class="bi bi-chat-square-text"></i></span>
                                 <span class="sb-nav-label">Settlement Offers</span>
                             </a>
                         }
                         else
                         {
                             <a class="sb-nav-link disabled" tabindex="-1" aria-disabled="true">
-                                <span class="sb-nav-icon"><i class="bi bi-handshake text-muted"></i></span>
+                                <span class="sb-nav-icon"><i class="bi bi-chat-square-text text-muted"></i></span>
                                 <span class="sb-nav-label text-muted">Settlement Offers</span>
                             </a>
                         }
                     </li>
                     <li>
-                        @if (canViewFinance)
+                        @if (isSolicitor)
                         {
-                            <a class="sb-nav-link" asp-controller="Disbursement" asp-action="Index"
+                            <a class="sb-nav-link" asp-controller="Claims" asp-action="Disbursements"
                                data-ptc-tooltip="Disbursements">
-                                <span class="sb-nav-icon"><i class="bi bi-credit-card"></i></span>
+                                <span class="sb-nav-icon"><i class="bi bi-receipt-cutoff"></i></span>
                                 <span class="sb-nav-label">Disbursements</span>
                             </a>
                         }
                         else
                         {
                             <a class="sb-nav-link disabled" tabindex="-1" aria-disabled="true">
-                                <span class="sb-nav-icon"><i class="bi bi-credit-card text-muted"></i></span>
+                                <span class="sb-nav-icon"><i class="bi bi-receipt-cutoff text-muted"></i></span>
                                 <span class="sb-nav-label text-muted">Disbursements</span>
                             </a>
                         }
                     </li>
                     <li>
-                        @if (canViewFinance)
+                        @if (isSolicitor)
                         {
-                            <a class="sb-nav-link" asp-controller="Disbursement" asp-action="Create"
+                            <a class="sb-nav-link" asp-controller="Claims" asp-action="NewDisbursement"
                                data-ptc-tooltip="New Disbursement">
-                                <span class="sb-nav-icon"><i class="bi bi-plus-circle"></i></span>
+                                <span class="sb-nav-icon"><i class="bi bi-receipt"></i></span>
                                 <span class="sb-nav-label">New Disbursement</span>
                             </a>
                         }
                         else
                         {
                             <a class="sb-nav-link disabled" tabindex="-1" aria-disabled="true">
-                                <span class="sb-nav-icon"><i class="bi bi-plus-circle text-muted"></i></span>
+                                <span class="sb-nav-icon"><i class="bi bi-receipt text-muted"></i></span>
                                 <span class="sb-nav-label text-muted">New Disbursement</span>
                             </a>
                         }
@@ -666,36 +666,31 @@
                     <div class="sb-flyout-header">Claims &amp; Settlement</div>
                     @if (isSolicitor)
                     {
-                        <a class="sb-flyout-item" asp-controller="Settlement" asp-action="Index">
-                            <i class="bi bi-handshake"></i> Settlement Offers
+                        <a class="sb-flyout-item" asp-controller="Claims" asp-action="SettlementOffers">
+                            <i class="bi bi-chat-square-text"></i> Settlement Offers
+                        </a>
+                        <a class="sb-flyout-item" asp-controller="Claims" asp-action="Disbursements">
+                            <i class="bi bi-receipt-cutoff"></i> Disbursements
+                        </a>
+                        <a class="sb-flyout-item" asp-controller="Claims" asp-action="NewDisbursement">
+                            <i class="bi bi-receipt"></i> New Disbursement
                         </a>
                     }
                     else
                     {
                         <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true">
-                            <i class="bi bi-handshake text-muted"></i> Settlement Offers
-                        </a>
-                    }
-                    @if (canViewFinance)
-                    {
-                        <a class="sb-flyout-item" asp-controller="Disbursement" asp-action="Index">
-                            <i class="bi bi-credit-card"></i> Disbursements
-                        </a>
-                        <a class="sb-flyout-item" asp-controller="Disbursement" asp-action="Create">
-                            <i class="bi bi-plus-circle"></i> New Disbursement
-                        </a>
-                    }
-                    else
-                    {
-                        <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true">
-                            <i class="bi bi-credit-card text-muted"></i> Disbursements
+                            <i class="bi bi-chat-square-text text-muted"></i> Settlement Offers
                         </a>
                         <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true">
-                            <i class="bi bi-plus-circle text-muted"></i> New Disbursement
+                            <i class="bi bi-receipt-cutoff text-muted"></i> Disbursements
+                        </a>
+                        <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true">
+                            <i class="bi bi-receipt text-muted"></i> New Disbursement
                         </a>
                     }
                 </div>
             </li>
+
 
             @* ── Medical & Injuries ── *@
             <li class="has-submenu">

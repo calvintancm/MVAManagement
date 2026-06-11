@@ -1,0 +1,326 @@
+@{
+    ViewData["Title"] = "Disbursements";
+    ViewData["BreadcrumbSection"] = "Case Management";
+    ViewData["BreadcrumbPage"] = "Disbursements";
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Disbursements</h1>
+        <p class="page-subtitle">All case expense records — fees, filings, and recoverable costs</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="@Url.Action("NewDisbursement","Claims")" class="btn-ptc-primary">
+            <i class="bi bi-plus-lg"></i> New Disbursement
+        </a>
+        <button class="btn-ptc-outline" onclick="exportGrid()">
+            <i class="bi bi-download"></i> Export
+        </button>
+    </div>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="ptc-alert-success mb-3"><i class="bi bi-check-circle-fill"></i> @TempData["Success"]</div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="ptc-alert-danger mb-3"><i class="bi bi-exclamation-triangle-fill"></i> @TempData["Error"]</div>
+}
+
+@* Stat strip *@
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;">
+    @foreach (var s in new[] {
+        new { Id="dStatCount",      Label="Total Records",      Icon="bi-receipt",        Color="#1d6fa4", Bg="#eff6ff" },
+        new { Id="dStatTotal",      Label="Total Disbursed",    Icon="bi-cash-stack",     Color="#7c3aed", Bg="#faf5ff" },
+        new { Id="dStatUnrecovered",Label="Unrecovered Amount", Icon="bi-arrow-repeat",   Color="#dc2626", Bg="#fef2f2" },
+        new { Id="dStatOffers",     Label="Open Offers",        Icon="bi-chat-square-text",Color="#d97706",Bg="#fffbeb" },
+    })
+    {
+        <div class="ptc-card" style="padding:14px 18px;display:flex;align-items:center;gap:12px;border-left:4px solid @s.Color;">
+            <div style="width:38px;height:38px;border-radius:10px;background:@s.Bg;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="bi @s.Icon" style="font-size:18px;color:@s.Color;"></i>
+            </div>
+            <div>
+                <div id="@s.Id" style="font-size:1.2rem;font-weight:700;line-height:1;color:#0f172a;">—</div>
+                <div style="font-size:0.72rem;color:#64748b;margin-top:3px;">@s.Label</div>
+            </div>
+        </div>
+    }
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-body" style="padding:16px 20px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;">
+            <div style="display:flex;flex-direction:column;gap:5px;flex:3;min-width:200px;">
+                <label class="filter-label">Search (File No / Claimant / Payee / Receipt)</label>
+                <input type="text" id="querySearch" class="k-textbox"
+                       style="width:100%;max-width:320px;" placeholder="Search..." />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:180px;">
+                <label class="filter-label">Category</label>
+                <select id="queryCategory" style="width:180px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:130px;">
+                <label class="filter-label">Recovery Status</label>
+                <select id="queryIsRecovered" style="width:130px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:120px;">
+                <label class="filter-label">Date From</label>
+                <input type="text" id="dtFrom" class="k-textbox" style="width:120px;" placeholder="dd/MM/yyyy" />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:120px;">
+                <label class="filter-label">Date To</label>
+                <input type="text" id="dtTo" class="k-textbox" style="width:120px;" placeholder="dd/MM/yyyy" />
+            </div>
+            <div style="display:flex;gap:8px;padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="refreshGrid()">
+                    <i class="bi bi-search"></i> Search
+                </button>
+                <button class="btn-ptc-outline" onclick="clearFilters()">
+                    <i class="bi bi-x-circle"></i> Clear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Grid Card *@
+<div class="ptc-card">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title"><i class="bi bi-receipt-cutoff"></i> Disbursement Register</h2>
+        <span id="recordCount" class="record-count-badge">0 records</span>
+    </div>
+    <div class="ptc-card-body" style="padding:0;">
+        <div id="main_grid"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+var allCategories = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.DisbursementCategories));
+
+$(function () {
+    kendo.culture('en-GB');
+
+    var catSource = (allCategories || []).map(function(c){ return c.CategoryName; });
+    $('#queryCategory').kendoDropDownList({
+        dataSource: catSource, optionLabel: 'All Categories'
+    });
+    $('#queryIsRecovered').kendoDropDownList({
+        dataTextField: 'text', dataValueField: 'value', optionLabel: 'All',
+        dataSource: [{ text: 'Recovered', value: 'true' }, { text: 'Not Recovered', value: 'false' }]
+    });
+    $('#dtFrom, #dtTo').kendoDatePicker({ format: 'dd/MM/yyyy', culture: 'en-GB' });
+    $('#querySearch').on('keypress', function(e){ if(e.which===13) refreshGrid(); });
+
+    var isMobile = window.innerWidth <= 576;
+
+    $('#main_grid').kendoGrid({
+        dataSource: {
+            transport: {
+                read:    { url: '@Url.Action("DisbursementRead",    "Claims")', type: 'POST' },
+                destroy: { url: '@Url.Action("DisbursementDestroy", "Claims")', type: 'POST' },
+                parameterMap: function (data, operation) {
+                    var token = $('input[name="__RequestVerificationToken"]').val();
+                    if (operation === 'read')
+                        return $.extend({}, data, getFilters(), { __RequestVerificationToken: token });
+                    return $.extend({}, data, { __RequestVerificationToken: token });
+                }
+            },
+            schema: {
+                data: 'Data', total: 'Total', errors: 'Errors',
+                model: {
+                    id: 'Id',
+                    fields: {
+                        Id:               { type: 'number', editable: false },
+                        DisbursementDate: { type: 'date' },
+                        Amount:           { type: 'number' },
+                        IsRecovered:      { type: 'boolean' }
+                    }
+                }
+            },
+            pageSize: 15, serverPaging: true, serverSorting: true,
+            sort: { field: 'DisbursementDate', dir: 'desc' },
+            requestEnd: function (e) {
+                if (e.type === 'read' && e.response) {
+                    var t = e.response.Total || 0;
+                    $('#recordCount').text(t + ' record' + (t !== 1 ? 's' : ''));
+                    computePageTotal(e.response.Data || []);
+                }
+            },
+            error: function (e) { handleGridError(e); }
+        },
+
+        columns: [
+            { field: 'Id', hidden: true },
+            {
+                field: 'FileNumber', title: 'Case File', width: 185, sortable: true,
+                template: function (d) {
+                    return '<a href="@Url.Action("EditCase","Case")?id=' + d.CaseFileId
+                         + '" style="font-family:monospace;font-weight:700;font-size:0.82rem;color:#1d6fa4;">'
+                         + kendo.htmlEncode(d.FileNumber || '') + '</a>'
+                         + '<div style="font-size:0.71rem;color:#64748b;margin-top:1px;">'
+                         + kendo.htmlEncode(d.ClaimantName || '') + '</div>';
+                }
+            },
+            {
+                field: 'DisbursementDate', title: 'Date', width: 110,
+                template: function (d) {
+                    var dt = kendo.parseDate(d.DisbursementDate);
+                    return dt ? kendo.toString(dt, 'dd/MM/yyyy') : '—';
+                }
+            },
+            {
+                field: 'DisbursementCategory', title: 'Category', width: 175,
+                template: function (d) {
+                    var cat  = d.DisbursementCategory || 'Miscellaneous';
+                    var color = '#94A3B8';
+                    if (allCategories) {
+                        var match = allCategories.find(function(c){ return c.CategoryName === cat; });
+                        if (match) color = match.HexColor || color;
+                    }
+                    return '<span style="display:inline-flex;align-items:center;gap:6px;">'
+                         + '<span style="width:9px;height:9px;border-radius:50%;background:' + color + ';flex-shrink:0;"></span>'
+                         + '<span style="font-size:0.82rem;">' + kendo.htmlEncode(cat) + '</span></span>';
+                }
+            },
+            {
+                field: 'Description', title: 'Description', width: 240,
+                template: function (d) {
+                    var t = d.Description && d.Description.length > 55
+                        ? d.Description.substring(0,55) + '…' : (d.Description || '—');
+                    return '<span style="font-size:0.82rem;" title="' + kendo.htmlEncode(d.Description || '') + '">'
+                         + kendo.htmlEncode(t) + '</span>';
+                }
+            },
+            {
+                field: 'Payee', title: 'Payee', width: 175, hidden: isMobile,
+                template: function (d) {
+                    return d.Payee
+                        ? '<span style="font-size:0.82rem;">' + kendo.htmlEncode(d.Payee) + '</span>'
+                        : '<span style="color:#94a3b8;">—</span>';
+                }
+            },
+            {
+                field: 'Amount', title: 'Amount (MYR)', width: 140,
+                attributes: { style: 'text-align:right;' },
+                template: function (d) {
+                    return '<span style="font-variant-numeric:tabular-nums;font-weight:700;color:#0f172a;">RM '
+                         + kendo.toString(d.Amount, 'n2') + '</span>';
+                }
+            },
+            {
+                field: 'IsRecovered', title: 'Recovered', width: 100,
+                attributes: { style: 'text-align:center;' },
+                template: function (d) {
+                    return d.IsRecovered
+                        ? '<span style="background:#dcfce7;color:#166534;padding:2px 9px;border-radius:20px;font-size:0.71rem;font-weight:700;">Yes</span>'
+                        : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:20px;font-size:0.71rem;font-weight:700;">No</span>';
+                }
+            },
+            {
+                field: 'ReceiptNumber', title: 'Receipt No.', width: 120, hidden: isMobile,
+                template: function (d) {
+                    return d.ReceiptNumber
+                        ? '<span style="font-family:monospace;font-size:0.8rem;">' + kendo.htmlEncode(d.ReceiptNumber) + '</span>'
+                        : '<span style="color:#94a3b8;">—</span>';
+                }
+            },
+            {
+                title: 'Actions', width: 135, sortable: false,
+                template: function (d) {
+                    var editUrl = '@Url.Action("EditDisbursement","Claims")?id=' + d.Id;
+                    return '<div style="display:flex;align-items:center;gap:6px;">'
+                         + '<a href="' + editUrl + '" class="btn btn-sm" style="padding:3px 10px;font-size:12px;background:#e0e7ff;border:none;color:#3730a3;" title="Edit"><i class="bi bi-pencil"></i></a>'
+                         + '<button onclick="deleteDisbursement(' + d.Id + ',' + d.IsRecovered + ',\'' + kendo.htmlEncode(d.FileNumber || '') + '\')" '
+                         + 'style="border:none;background:transparent;color:#dc2626;font-size:14px;cursor:pointer;padding:3px 6px;" '
+                         + 'title="Delete"><i class="bi bi-trash3"></i></button>'
+                         + '</div>';
+                }
+            }
+        ],
+
+        editable: false,
+        pageable: { pageSize: 15, pageSizes: [15, 30, 50], buttonCount: 5 },
+        sortable: true, scrollable: true, height: 540,
+        dataBound: function () {
+            this.thead.find('th').css({ background:'#f8fafc','font-weight':'600','font-size':'0.77rem',color:'#475569','border-color':'#e2e8f0' });
+        }
+    });
+
+    loadStats();
+    refreshGrid();
+});
+
+// Compute total for this page and show in footer
+function computePageTotal(rows) {
+    var sum = rows.reduce(function(acc, r){ return acc + (r.Amount || 0); }, 0);
+    var unrec = rows.filter(function(r){ return !r.IsRecovered; }).reduce(function(acc, r){ return acc + (r.Amount || 0); }, 0);
+    // Update footer note
+    var footer = $('#pageTotal');
+    if (!footer.length) {
+        $('<div id="pageTotal" style="padding:8px 18px;font-size:0.78rem;color:#64748b;border-top:1px solid #e2e8f0;display:flex;gap:24px;background:#f8fafc;"></div>')
+            .appendTo($('#main_grid').closest('.ptc-card').find('.ptc-card-body'));
+    }
+    $('#pageTotal').html(
+        '<span>Page total: <strong>RM ' + kendo.toString(sum, 'n2') + '</strong></span>'
+        + '<span>Unrecovered on page: <strong style="color:#dc2626;">RM ' + kendo.toString(unrec, 'n2') + '</strong></span>'
+    );
+}
+
+function loadStats() {
+    $.post('@Url.Action("ClaimsSummaryStats","Claims")',
+           { __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val() },
+           function (r) {
+               if (!r) return;
+               $('#dStatCount').text(r.disbCount          || 0);
+               $('#dStatTotal').text('RM ' + kendo.toString(r.totalDisb        || 0, 'n2'));
+               $('#dStatUnrecovered').text('RM ' + kendo.toString(r.unrecoveredDisb || 0, 'n2'));
+               $('#dStatOffers').text(r.openOffers || 0);
+           });
+}
+function getFilters() {
+    var dpFrom = $('#dtFrom').data('kendoDatePicker');
+    var dpTo   = $('#dtTo').data('kendoDatePicker');
+    return {
+        search:      $('#querySearch').val().trim(),
+        category:    $('#queryCategory').data('kendoDropDownList') ? $('#queryCategory').data('kendoDropDownList').value() : '',
+        isRecovered: $('#queryIsRecovered').data('kendoDropDownList') ? $('#queryIsRecovered').data('kendoDropDownList').value() : '',
+        dateFrom:    dpFrom && dpFrom.value() ? dpFrom.value().toISOString() : '',
+        dateTo:      dpTo   && dpTo.value()   ? dpTo.value().toISOString()   : ''
+    };
+}
+function refreshGrid() {
+    var g = $('#main_grid').data('kendoGrid');
+    if (g) g.dataSource.query({ page: 1, pageSize: g.dataSource.pageSize(), sort: g.dataSource.sort() });
+}
+function clearFilters() {
+    $('#querySearch').val('');
+    ['#queryCategory','#queryIsRecovered'].forEach(function(id){ var d=$(id).data('kendoDropDownList'); if(d) d.value(''); });
+    var f=$('#dtFrom').data('kendoDatePicker'); if(f) f.value(null);
+    var t=$('#dtTo').data('kendoDatePicker');   if(t) t.value(null);
+    refreshGrid();
+}
+function exportGrid() { var g=$('#main_grid').data('kendoGrid'); if(g){ g.saveAsExcel(); KSwal.toast('info','Exporting...'); } }
+function deleteDisbursement(id, isRecovered, fileNo) {
+    if (isRecovered) { KSwal.error('Cannot Delete', 'Recovered disbursements cannot be deleted — they are part of the financial audit record.'); return; }
+    KSwal.confirmDelete('Delete Disbursement?',
+        'Permanently remove this disbursement from <strong>' + fileNo + '</strong>? The case file total will be updated.',
+        function () {
+            var grid = $('#main_grid').data('kendoGrid');
+            var item = grid.dataSource.get(id);
+            if (item) { grid.dataSource.remove(item); grid.dataSource.sync(); loadStats(); }
+        });
+}
+function handleGridError(e) {
+    var msg='An error occurred.';
+    if(e.errors){ var p=[]; $.each(e.errors,function(k,v){ if(v.errors) p.push(v.errors.join('\n')); else if(typeof v==='string') p.push(v); }); if(p.length) msg=p.join('\n'); }
+    else if(e.xhr){ if(e.xhr.status===401) msg='Session expired.'; else if(e.xhr.status===403) msg='Access denied.'; else if(e.xhr.status===500) msg='Server error.'; }
+    KSwal.error('Grid Error', msg);
+}
+</script>
+}
