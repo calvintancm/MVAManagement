@@ -697,7 +697,7 @@
                 <button class="sb-nav-link" data-bs-toggle="collapse"
                         data-bs-target="#menuMedical" aria-expanded="false"
                         data-ptc-tooltip="Medical & Injuries">
-                    <span class="sb-nav-icon"><i class="bi bi-heart-pulse"></i></span>
+                    <span class="sb-nav-icon"><i class="bi bi-clipboard2-pulse"></i></span>
                     <span class="sb-nav-label">Medical &amp; Injuries</span>
                     <i class="bi bi-chevron-right sb-chevron"></i>
                 </button>
@@ -706,16 +706,16 @@
                     <li>
                         @if (isCaseworker)
                         {
-                            <a class="sb-nav-link" asp-controller="Injury" asp-action="Index"
+                            <a class="sb-nav-link" asp-controller="Medical" asp-action="InjuryRecords"
                                data-ptc-tooltip="Injury Records">
-                                <span class="sb-nav-icon"><i class="bi bi-file-medical"></i></span>
+                                <span class="sb-nav-icon"><i class="bi bi-bandaid"></i></span>
                                 <span class="sb-nav-label">Injury Records</span>
                             </a>
                         }
                         else
                         {
                             <a class="sb-nav-link disabled" tabindex="-1" aria-disabled="true">
-                                <span class="sb-nav-icon"><i class="bi bi-file-medical text-muted"></i></span>
+                                <span class="sb-nav-icon"><i class="bi bi-bandaid text-muted"></i></span>
                                 <span class="sb-nav-label text-muted">Injury Records</span>
                             </a>
                         }
@@ -723,16 +723,16 @@
                     <li>
                         @if (isCaseworker)
                         {
-                            <a class="sb-nav-link" asp-controller="Injury" asp-action="PendingReports"
-                               data-ptc-tooltip="Pending Medical Reports">
-                                <span class="sb-nav-icon"><i class="bi bi-hourglass-split"></i></span>
+                            <a class="sb-nav-link" asp-controller="Medical" asp-action="PendingReports"
+                               data-ptc-tooltip="Pending Reports">
+                                <span class="sb-nav-icon"><i class="bi bi-file-earmark-medical"></i></span>
                                 <span class="sb-nav-label">Pending Reports</span>
                             </a>
                         }
                         else
                         {
                             <a class="sb-nav-link disabled" tabindex="-1" aria-disabled="true">
-                                <span class="sb-nav-icon"><i class="bi bi-hourglass-split text-muted"></i></span>
+                                <span class="sb-nav-icon"><i class="bi bi-file-earmark-medical text-muted"></i></span>
                                 <span class="sb-nav-label text-muted">Pending Reports</span>
                             </a>
                         }
@@ -743,31 +743,32 @@
                     <div class="sb-flyout-header">Medical &amp; Injuries</div>
                     @if (isCaseworker)
                     {
-                        <a class="sb-flyout-item" asp-controller="Injury" asp-action="Index">
-                            <i class="bi bi-file-medical"></i> Injury Records
+                        <a class="sb-flyout-item" asp-controller="Medical" asp-action="InjuryRecords">
+                            <i class="bi bi-bandaid"></i> Injury Records
                         </a>
-                        <a class="sb-flyout-item" asp-controller="Injury" asp-action="PendingReports">
-                            <i class="bi bi-hourglass-split"></i> Pending Reports
+                        <a class="sb-flyout-item" asp-controller="Medical" asp-action="PendingReports">
+                            <i class="bi bi-file-earmark-medical"></i> Pending Reports
                         </a>
                     }
                     else
                     {
                         <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true">
-                            <i class="bi bi-file-medical text-muted"></i> Injury Records
+                            <i class="bi bi-bandaid text-muted"></i> Injury Records
                         </a>
                         <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true">
-                            <i class="bi bi-hourglass-split text-muted"></i> Pending Reports
+                            <i class="bi bi-file-earmark-medical text-muted"></i> Pending Reports
                         </a>
                     }
                 </div>
             </li>
+
 
             @* ── Documents ── *@
             <li class="has-submenu">
                 <button class="sb-nav-link" data-bs-toggle="collapse"
                         data-bs-target="#menuDocuments" aria-expanded="false"
                         data-ptc-tooltip="Documents">
-                    <span class="sb-nav-icon"><i class="bi bi-files"></i></span>
+                    <span class="sb-nav-icon"><i class="bi bi-folder2"></i></span>
                     <span class="sb-nav-label">Documents</span>
                     <i class="bi bi-chevron-right sb-chevron"></i>
                 </button>
@@ -776,16 +777,16 @@
                     <li>
                         @if (isCaseworker)
                         {
-                            <a class="sb-nav-link" asp-controller="Document" asp-action="Index"
+                            <a class="sb-nav-link" asp-controller="Document" asp-action="AllDocuments"
                                data-ptc-tooltip="All Documents">
-                                <span class="sb-nav-icon"><i class="bi bi-folder"></i></span>
+                                <span class="sb-nav-icon"><i class="bi bi-file-earmark-text"></i></span>
                                 <span class="sb-nav-label">All Documents</span>
                             </a>
                         }
                         else
                         {
                             <a class="sb-nav-link disabled" tabindex="-1" aria-disabled="true">
-                                <span class="sb-nav-icon"><i class="bi bi-folder text-muted"></i></span>
+                                <span class="sb-nav-icon"><i class="bi bi-file-earmark-text text-muted"></i></span>
                                 <span class="sb-nav-label text-muted">All Documents</span>
                             </a>
                         }
@@ -794,15 +795,15 @@
                         @if (isCaseworker)
                         {
                             <a class="sb-nav-link" asp-controller="Document" asp-action="Outstanding"
-                               data-ptc-tooltip="Outstanding Documents">
-                                <span class="sb-nav-icon"><i class="bi bi-exclamation-circle"></i></span>
+                               data-ptc-tooltip="Outstanding">
+                                <span class="sb-nav-icon"><i class="bi bi-file-earmark-x"></i></span>
                                 <span class="sb-nav-label">Outstanding</span>
                             </a>
                         }
                         else
                         {
                             <a class="sb-nav-link disabled" tabindex="-1" aria-disabled="true">
-                                <span class="sb-nav-icon"><i class="bi bi-exclamation-circle text-muted"></i></span>
+                                <span class="sb-nav-icon"><i class="bi bi-file-earmark-x text-muted"></i></span>
                                 <span class="sb-nav-label text-muted">Outstanding</span>
                             </a>
                         }
@@ -810,7 +811,7 @@
                     <li>
                         @if (isCaseworker)
                         {
-                            <a class="sb-nav-link" asp-controller="Document" asp-action="Upload"
+                            <a class="sb-nav-link" asp-controller="Document" asp-action="UploadDocument"
                                data-ptc-tooltip="Upload Document">
                                 <span class="sb-nav-icon"><i class="bi bi-cloud-upload"></i></span>
                                 <span class="sb-nav-label">Upload Document</span>
@@ -830,23 +831,23 @@
                     <div class="sb-flyout-header">Documents</div>
                     @if (isCaseworker)
                     {
-                        <a class="sb-flyout-item" asp-controller="Document" asp-action="Index">
-                            <i class="bi bi-folder"></i> All Documents
+                        <a class="sb-flyout-item" asp-controller="Document" asp-action="AllDocuments">
+                            <i class="bi bi-file-earmark-text"></i> All Documents
                         </a>
                         <a class="sb-flyout-item" asp-controller="Document" asp-action="Outstanding">
-                            <i class="bi bi-exclamation-circle"></i> Outstanding
+                            <i class="bi bi-file-earmark-x"></i> Outstanding
                         </a>
-                        <a class="sb-flyout-item" asp-controller="Document" asp-action="Upload">
+                        <a class="sb-flyout-item" asp-controller="Document" asp-action="UploadDocument">
                             <i class="bi bi-cloud-upload"></i> Upload Document
                         </a>
                     }
                     else
                     {
                         <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true">
-                            <i class="bi bi-folder text-muted"></i> All Documents
+                            <i class="bi bi-file-earmark-text text-muted"></i> All Documents
                         </a>
                         <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true">
-                            <i class="bi bi-exclamation-circle text-muted"></i> Outstanding
+                            <i class="bi bi-file-earmark-x text-muted"></i> Outstanding
                         </a>
                         <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true">
                             <i class="bi bi-cloud-upload text-muted"></i> Upload Document
@@ -854,6 +855,7 @@
                     }
                 </div>
             </li>
+
 
             @* ════ REPORTS ════ *@
             <li class="sb-section-title">Reports</li>

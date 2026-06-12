@@ -3,17 +3,10 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using MVAManagement.Models;
 using MVAManagement.Models.MVA;
-using System.Reflection.Emit;
 
 namespace MVAManagement.Data
 {
-    // ──────────────────────────────────────────────────────────────────────
-    // FIX: was IdentityDbContext (untyped) — must be IdentityDbContext<ApplicationUser>
-    //
-    // The untyped base registers IdentityUser, not ApplicationUser, so EF Core
-    // cannot create a DbSet<ApplicationUser> and UserManager<ApplicationUser>
-    // throws "type is not included in the model for the context".
-    // ──────────────────────────────────────────────────────────────────────
+    // Use IdentityDbContext<ApplicationUser> so Identity tables (AspNetUsers, etc.) are included
     public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     {
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
@@ -21,24 +14,24 @@ namespace MVAManagement.Data
         {
         }
 
-        // ── MVA domain tables ─────────────────────────────────────────────
-        public DbSet<CaseFile>           CaseFiles            { get; set; }
-        public DbSet<CaseDisbursement>   CaseDisbursements    { get; set; }
-        public DbSet<AccidentVehicle>    AccidentVehicles     { get; set; }
-        public DbSet<AuditSessionLog>    AuditSessionLogs     { get; set; }
-        public DbSet<InsurerRegistry>    InsurerRegistries    { get; set; }
-        public DbSet<CaseDocument>       CaseDocuments        { get; set; }
-        public DbSet<HearingRecord>      HearingRecords       { get; set; }
-        public DbSet<InjuryRecord>       InjuryRecords        { get; set; }
-        public DbSet<CaseStatus>         CaseStatuses         { get; set; }
-        public DbSet<CaseworkerProfile>  CaseworkerProfiles   { get; set; }
-
-        public DbSet<CourtVenue>          CourtVenues          { get; set; }    
+        // ── Domain tables ─────────────────────────────────────────────
+        public DbSet<CaseFile> CaseFiles { get; set; }
+        public DbSet<CaseDisbursement> CaseDisbursements { get; set; }
+        public DbSet<AccidentVehicle> AccidentVehicles { get; set; }
+        public DbSet<AuditSessionLog> AuditSessionLogs { get; set; }
+        public DbSet<InsurerRegistry> InsurerRegistries { get; set; }
+        public DbSet<CaseDocument> CaseDocuments { get; set; }
+        public DbSet<HearingRecord> HearingRecords { get; set; }
+        public DbSet<InjuryRecord> InjuryRecords { get; set; }
+        public DbSet<CaseStatus> CaseStatuses { get; set; }
+        public DbSet<CaseworkerProfile> CaseworkerProfiles { get; set; }
+        public DbSet<CourtVenue> CourtVenues { get; set; }
         public DbSet<DisbursementCategory> DisbursementCategories { get; set; }
-
         public DbSet<HearingStage> HearingStages { get; set; }
-
         public DbSet<SettlementOffer> SettlementOffers { get; set; }
+
+        public DbSet<MedicalExamination> MedicalExaminations { get; set; }
+
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
@@ -56,9 +49,11 @@ namespace MVAManagement.Data
             builder.Entity<InsurerRegistry>().ToTable("InsurerRegistry");
             builder.Entity<CourtVenue>().ToTable("CourtVenue");
             builder.Entity<HearingStage>().ToTable("HearingStage");
-            builder.Entity<DisbursementCategory>().ToTable("DisbursementCategory"); // ADD THIS
-            builder.Entity<SettlementOffer>().ToTable("SettlementOffer"); // ADD THIS
-            // ── HearingStage explicit column mapping (fixes missing DisplayOrder) ──
+            builder.Entity<DisbursementCategory>().ToTable("DisbursementCategory"); // ✅ singular, matches DB
+            builder.Entity<SettlementOffer>().ToTable("SettlementOffer");
+            builder.Entity<MedicalExamination>().ToTable("MedicalExamination");
+
+            // ── HearingStage explicit column mapping ───────────────────────────
             builder.Entity<HearingStage>(entity =>
             {
                 entity.Property(e => e.StageCode)
@@ -69,15 +64,12 @@ namespace MVAManagement.Data
                       .IsRequired();
 
                 entity.Property(e => e.DisplayOrder)
-                      .HasDefaultValue(0);   // ensures EF includes it
+                      .HasDefaultValue(0);
             });
 
-
-            //
-            // ── DisbursementCategory ──────────────────────────────────────────
+            // ── DisbursementCategory configuration ─────────────────────────────
             builder.Entity<DisbursementCategory>(entity =>
             {
-                entity.ToTable("DisbursementCategory");
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.CategoryName).IsRequired().HasMaxLength(100);
                 entity.Property(e => e.Description).HasMaxLength(300);
@@ -85,23 +77,19 @@ namespace MVAManagement.Data
                 entity.Property(e => e.DisplayOrder).HasDefaultValue(0);
                 entity.Property(e => e.IsActive).HasDefaultValue(true);
 
+                // Seed data
                 entity.HasData(
-                            new DisbursementCategory { Id = 1, CategoryName = "Medical Report Fee", HexColor = "#185FA5", DisplayOrder = 1, IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
-                            new DisbursementCategory { Id = 2, CategoryName = "Specialist Examination Fee", HexColor = "#0EA5E9", DisplayOrder = 2, IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
-                            new DisbursementCategory { Id = 3, CategoryName = "Court Filing Fee", HexColor = "#7C3AED", DisplayOrder = 3, IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
-                            new DisbursementCategory { Id = 4, CategoryName = "Police Report Fee", HexColor = "#DC2626", DisplayOrder = 4, IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
-                            new DisbursementCategory { Id = 5, CategoryName = "Process Server Fee", HexColor = "#D97706", DisplayOrder = 5, IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
-                            new DisbursementCategory { Id = 6, CategoryName = "Expert Witness Fee", HexColor = "#059669", DisplayOrder = 6, IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
-                            new DisbursementCategory { Id = 7, CategoryName = "Interpreter Fee", HexColor = "#DB2777", DisplayOrder = 7, IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
-                            new DisbursementCategory { Id = 8, CategoryName = "Postage / Courier", HexColor = "#64748B", DisplayOrder = 8, IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
-                            new DisbursementCategory { Id = 9, CategoryName = "Miscellaneous", HexColor = "#94A3B8", DisplayOrder = 9, IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) }
-                       );
+                    new DisbursementCategory { Id = 1, CategoryName = "Medical Report Fee", HexColor = "#185FA5", DisplayOrder = 1, IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                    new DisbursementCategory { Id = 2, CategoryName = "Specialist Examination Fee", HexColor = "#0EA5E9", DisplayOrder = 2, IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                    new DisbursementCategory { Id = 3, CategoryName = "Court Filing Fee", HexColor = "#7C3AED", DisplayOrder = 3, IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                    new DisbursementCategory { Id = 4, CategoryName = "Police Report Fee", HexColor = "#DC2626", DisplayOrder = 4, IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                    new DisbursementCategory { Id = 5, CategoryName = "Process Server Fee", HexColor = "#D97706", DisplayOrder = 5, IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                    new DisbursementCategory { Id = 6, CategoryName = "Expert Witness Fee", HexColor = "#059669", DisplayOrder = 6, IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                    new DisbursementCategory { Id = 7, CategoryName = "Interpreter Fee", HexColor = "#DB2777", DisplayOrder = 7, IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                    new DisbursementCategory { Id = 8, CategoryName = "Postage / Courier", HexColor = "#64748B", DisplayOrder = 8, IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                    new DisbursementCategory { Id = 9, CategoryName = "Miscellaneous", HexColor = "#94A3B8", DisplayOrder = 9, IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) }
+                );
             });
-
-
-
-
-            //
 
             // ── CaseJournal FK disambiguation ─────────────────────────────────
             builder.Entity<CaseJournal>(entity =>
@@ -124,7 +112,6 @@ namespace MVAManagement.Data
                              .Where(p => p.ClrType == typeof(decimal)
                                       || p.ClrType == typeof(decimal?)))
                 {
-                    // Only set if not already explicitly configured
                     if (property.GetColumnType() == null)
                     {
                         property.SetColumnType("decimal(18,2)");
@@ -132,17 +119,5 @@ namespace MVAManagement.Data
                 }
             }
         }
-
-       
-
-        //     builder.Entity<CaseDisbursement>()
-        //.Property(c => c.Amount)
-        //.HasColumnType("decimal(18,2)");
-
-        //     builder.Entity<CaseFile>()
-        //         .Property(c => c.ClaimedAmount)
-        //         .HasColumnType("decimal(18,2)");
-
-
     }
 }

@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore" Version="8.0.26" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.26" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.UI" Version="8.0.26" />
@@ -22,6 +23,8 @@
     <Folder Include="Views\Case\" />
     <Folder Include="Views\Hearing\" />
     <Folder Include="Views\Claims\" />
+    <Folder Include="Views\Medical\" />
+    <Folder Include="Views\Document\" />
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,345 @@
+@{
+    ViewData["Title"] = "All Documents";
+    ViewData["BreadcrumbSection"] = "Case Management";
+    ViewData["BreadcrumbPage"] = "All Documents";
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">All Documents</h1>
+        <p class="page-subtitle">Complete document register across all active case files</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="@Url.Action("UploadDocument","Document")" class="btn-ptc-primary">
+            <i class="bi bi-upload"></i> Upload Document
+        </a>
+        <button class="btn-ptc-outline" onclick="exportGrid()">
+            <i class="bi bi-download"></i> Export
+        </button>
+    </div>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="ptc-alert-success mb-3"><i class="bi bi-check-circle-fill"></i> @TempData["Success"]</div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="ptc-alert-danger mb-3"><i class="bi bi-exclamation-triangle-fill"></i> @TempData["Error"]</div>
+}
+
+@* Stat strip *@
+<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px;">
+    @foreach (var s in new[] {
+        new { Id="dStatTotal",      Label="Total Documents",  Icon="bi-file-earmark-text",  Color="#1d6fa4", Bg="#eff6ff" },
+        new { Id="dStatReceived",   Label="Received",         Icon="bi-file-earmark-check", Color="#16a34a", Bg="#f0fdf4" },
+        new { Id="dStatOutstanding",Label="Outstanding",      Icon="bi-hourglass-split",    Color="#dc2626", Bg="#fef2f2" },
+        new { Id="dStatWithFile",   Label="Digital Copies",   Icon="bi-cloud-check",        Color="#7c3aed", Bg="#faf5ff" },
+        new { Id="dStatNotReq",     Label="Not Required",     Icon="bi-x-circle",           Color="#64748b", Bg="#f8fafc" },
+    })
+    {
+        <div class="ptc-card" style="padding:14px 18px;display:flex;align-items:center;gap:12px;border-left:4px solid @s.Color;">
+            <div style="width:38px;height:38px;border-radius:10px;background:@s.Bg;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="bi @s.Icon" style="font-size:18px;color:@s.Color;"></i>
+            </div>
+            <div>
+                <div id="@s.Id" style="font-size:1.4rem;font-weight:700;line-height:1;color:#0f172a;">—</div>
+                <div style="font-size:0.72rem;color:#64748b;margin-top:3px;">@s.Label</div>
+            </div>
+        </div>
+    }
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-body" style="padding:16px 20px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;">
+            <div style="display:flex;flex-direction:column;gap:5px;flex:3;min-width:200px;">
+                <label class="filter-label">Search (File No / Claimant / Document / Source)</label>
+                <input type="text" id="querySearch" class="k-textbox"
+                       style="width:100%;max-width:300px;" placeholder="Search..." />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:145px;">
+                <label class="filter-label">Category</label>
+                <select id="queryCategory" style="width:145px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:155px;">
+                <label class="filter-label">Collection Status</label>
+                <select id="queryCollectionStatus" style="width:155px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:115px;">
+                <label class="filter-label">Received</label>
+                <select id="queryIsReceived" style="width:115px;"></select>
+            </div>
+            <div style="display:flex;gap:8px;padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="refreshGrid()">
+                    <i class="bi bi-search"></i> Search
+                </button>
+                <button class="btn-ptc-outline" onclick="clearFilters()">
+                    <i class="bi bi-x-circle"></i> Clear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Grid Card *@
+<div class="ptc-card">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title"><i class="bi bi-folder2"></i> Document Register</h2>
+        <span id="recordCount" class="record-count-badge">0 records</span>
+    </div>
+    <div class="ptc-card-body" style="padding:0;">
+        <div id="main_grid"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+var allCaseFiles = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.CaseFiles));
+
+var docCategories    = ['Police','Medical','Legal','Insurance','Financial','Court','Other'];
+var collectionStatuses = ['Awaiting','Requested','Received','Reviewed','Not Required'];
+
+var categoryIconMap = {
+    'Police':    { icon:'bi-shield-check',      color:'#1d6fa4' },
+    'Medical':   { icon:'bi-heart-pulse',        color:'#dc2626' },
+    'Legal':     { icon:'bi-book',               color:'#7c3aed' },
+    'Insurance': { icon:'bi-file-earmark-lock',  color:'#d97706' },
+    'Financial': { icon:'bi-cash-stack',         color:'#16a34a' },
+    'Court':     { icon:'bi-bank2',              color:'#0e7490' },
+    'Other':     { icon:'bi-file-earmark',       color:'#64748b' }
+};
+var statusColorMap = {
+    'Awaiting':     { bg:'#fef3c7', color:'#92400e' },
+    'Requested':    { bg:'#dbeafe', color:'#1d40ae' },
+    'Received':     { bg:'#dcfce7', color:'#166534' },
+    'Reviewed':     { bg:'#e0e7ff', color:'#3730a3' },
+    'Not Required': { bg:'#f1f5f9', color:'#475569' }
+};
+
+$(function () {
+    kendo.culture('en-GB');
+
+    $('#queryCategory').kendoDropDownList({ dataSource: docCategories, optionLabel: 'All Categories' });
+    $('#queryCollectionStatus').kendoDropDownList({ dataSource: collectionStatuses, optionLabel: 'All Statuses' });
+    $('#queryIsReceived').kendoDropDownList({
+        dataTextField: 'text', dataValueField: 'value', optionLabel: 'All',
+        dataSource: [{ text: 'Yes — Received', value: 'true' }, { text: 'No — Pending', value: 'false' }]
+    });
+    $('#querySearch').on('keypress', function(e){ if(e.which===13) refreshGrid(); });
+
+    var isMobile = window.innerWidth <= 576;
+
+    $('#main_grid').kendoGrid({
+        dataSource: {
+            transport: {
+                read:    { url: '@Url.Action("DocumentRead",    "Document")', type: 'POST' },
+                destroy: { url: '@Url.Action("DocumentDestroy", "Document")', type: 'POST' },
+                parameterMap: function (data, operation) {
+                    var token = $('input[name="__RequestVerificationToken"]').val();
+                    if (operation === 'read')
+                        return $.extend({}, data, getFilters(), { scope: 'all', __RequestVerificationToken: token });
+                    return $.extend({}, data, { __RequestVerificationToken: token });
+                }
+            },
+            schema: {
+                data: 'Data', total: 'Total', errors: 'Errors',
+                model: {
+                    id: 'Id',
+                    fields: {
+                        Id:               { type: 'number',  editable: false },
+                        IsReceived:       { type: 'boolean' },
+                        ReceivedDate:     { type: 'date'    },
+                        CollectionStatus: { type: 'string'  }
+                    }
+                }
+            },
+            pageSize: 15, serverPaging: true, serverSorting: true,
+            sort: { field: 'FileNumber', dir: 'asc' },
+            requestEnd: function (e) {
+                if (e.type === 'read' && e.response) {
+                    var t = e.response.Total || 0;
+                    $('#recordCount').text(t + ' record' + (t !== 1 ? 's' : ''));
+                }
+            },
+            error: function (e) { handleGridError(e); }
+        },
+
+        columns: [
+            { field: 'Id', hidden: true },
+            {
+                field: 'FileNumber', title: 'Case File', width: 190, sortable: true,
+                template: function (d) {
+                    return '<a href="@Url.Action("EditCase","Case")?id=' + d.CaseFileId
+                         + '" style="font-family:monospace;font-weight:700;font-size:0.82rem;color:#1d6fa4;">'
+                         + kendo.htmlEncode(d.FileNumber || '') + '</a>'
+                         + '<div style="font-size:0.71rem;color:#64748b;margin-top:1px;">'
+                         + kendo.htmlEncode(d.ClaimantName || '') + '</div>';
+                }
+            },
+            {
+                field: 'DocumentCategory', title: 'Category', width: 110, sortable: true,
+                template: function (d) {
+                    var cat = categoryIconMap[d.DocumentCategory] || categoryIconMap['Other'];
+                    return '<span style="display:inline-flex;align-items:center;gap:5px;">'
+                         + '<i class="bi ' + cat.icon + '" style="font-size:14px;color:' + cat.color + ';"></i>'
+                         + '<span style="font-size:0.78rem;color:' + cat.color + ';font-weight:600;">'
+                         + kendo.htmlEncode(d.DocumentCategory || '') + '</span></span>';
+                }
+            },
+            {
+                field: 'DocumentName', title: 'Document', width: 230, sortable: true,
+                template: function (d) {
+                    var fileIcon = d.OriginalFileName
+                        ? ' <i class="bi bi-paperclip" style="color:#1d6fa4;font-size:12px;" title="Digital copy attached"></i>'
+                        : '';
+                    var src = d.ExpectedFrom
+                        ? '<div style="font-size:0.71rem;color:#64748b;">From: ' + kendo.htmlEncode(d.ExpectedFrom) + '</div>'
+                        : '';
+                    return '<span style="font-weight:600;font-size:0.83rem;">'
+                         + kendo.htmlEncode(d.DocumentName || '') + '</span>' + fileIcon + src;
+                }
+            },
+            {
+                field: 'CollectionStatus', title: 'Status', width: 125, sortable: true,
+                attributes: { style: 'text-align:center;' },
+                template: function (d) {
+                    var s = statusColorMap[d.CollectionStatus] || { bg:'#e2e8f0', color:'#475569' };
+                    return '<span style="background:' + s.bg + ';color:' + s.color
+                         + ';padding:2px 9px;border-radius:20px;font-size:0.71rem;font-weight:700;">'
+                         + kendo.htmlEncode(d.CollectionStatus || '') + '</span>';
+                }
+            },
+            {
+                field: 'IsReceived', title: 'Received', width: 90,
+                attributes: { style: 'text-align:center;' },
+                template: function (d) {
+                    return d.IsReceived
+                        ? '<i class="bi bi-check-circle-fill" style="color:#16a34a;font-size:16px;" title="Received"></i>'
+                        : '<i class="bi bi-clock" style="color:#d97706;font-size:16px;" title="Awaiting"></i>';
+                }
+            },
+            {
+                field: 'ReceivedDate', title: 'Received Date', width: 120, hidden: isMobile,
+                template: function (d) {
+                    if (!d.ReceivedDate) return '<span style="color:#94a3b8;">—</span>';
+                    var dt = kendo.parseDate(d.ReceivedDate);
+                    return dt ? kendo.toString(dt, 'dd/MM/yyyy') : '—';
+                }
+            },
+            {
+                field: 'OriginalFileName', title: 'Digital Copy', width: 175, hidden: isMobile, sortable: false,
+                template: function (d) {
+                    if (!d.DigitalStoragePath) return '<span style="color:#94a3b8;">No file</span>';
+                    return '<a href="' + kendo.htmlEncode(d.DigitalStoragePath) + '" target="_blank" '
+                         + 'style="display:inline-flex;align-items:center;gap:4px;font-size:0.8rem;color:#1d6fa4;">'
+                         + '<i class="bi bi-file-earmark-arrow-down"></i> '
+                         + kendo.htmlEncode(d.OriginalFileName || 'Download') + '</a>';
+                }
+            },
+            {
+                field: 'Remarks', title: 'Remarks', width: 180, hidden: isMobile, sortable: false,
+                template: function (d) {
+                    if (!d.Remarks) return '<span style="color:#94a3b8;">—</span>';
+                    var t = d.Remarks.length > 45 ? d.Remarks.substring(0,45) + '…' : d.Remarks;
+                    return '<span style="font-size:0.8rem;" title="' + kendo.htmlEncode(d.Remarks) + '">'
+                         + kendo.htmlEncode(t) + '</span>';
+                }
+            },
+            {
+                title: 'Actions', width: 145, sortable: false,
+                template: function (d) {
+                    var editUrl = '@Url.Action("EditDocument","Document")?id=' + d.Id;
+                    var markBtn = !d.IsReceived
+                        ? '<button onclick="markReceived(' + d.Id + ',\'' + kendo.htmlEncode(d.DocumentName || '') + '\')" '
+                          + 'style="border:none;background:transparent;color:#16a34a;font-size:14px;cursor:pointer;padding:3px 6px;" '
+                          + 'title="Mark Received"><i class="bi bi-check-circle"></i></button>'
+                        : '';
+                    return '<div style="display:flex;align-items:center;gap:4px;">'
+                         + '<a href="' + editUrl + '" class="btn btn-sm" style="padding:3px 10px;font-size:12px;background:#e0e7ff;border:none;color:#3730a3;" title="Edit"><i class="bi bi-pencil"></i></a>'
+                         + markBtn
+                         + '<button onclick="deleteDocument(' + d.Id + ',\'' + kendo.htmlEncode(d.DocumentName || '') + '\')" '
+                         + 'style="border:none;background:transparent;color:#dc2626;font-size:14px;cursor:pointer;padding:3px 6px;" '
+                         + 'title="Delete"><i class="bi bi-trash3"></i></button>'
+                         + '</div>';
+                }
+            }
+        ],
+
+        editable: false,
+        pageable: { pageSize: 15, pageSizes: [15, 30, 50], buttonCount: 5 },
+        sortable: true, scrollable: true, height: 540,
+        dataBound: function () {
+            this.thead.find('th').css({ background:'#f8fafc','font-weight':'600','font-size':'0.77rem',color:'#475569','border-color':'#e2e8f0' });
+        }
+    });
+
+    loadStats();
+    refreshGrid();
+});
+
+function loadStats() {
+    $.post('@Url.Action("DocumentSummaryStats","Document")',
+           { __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val() },
+           function (r) {
+               if (!r) return;
+               $('#dStatTotal').text(r.total       || 0);
+               $('#dStatReceived').text(r.received    || 0);
+               $('#dStatOutstanding').text(r.outstanding || 0);
+               $('#dStatWithFile').text(r.withFile    || 0);
+               $('#dStatNotReq').text(r.notRequired  || 0);
+           });
+}
+function markReceived(id, docName) {
+    KSwal.confirm('Mark Received?',
+        'Confirm that <strong>' + docName + '</strong> has been received by the firm.',
+        'Yes, Mark Received',
+        function () {
+            $.post('@Url.Action("DocumentMarkReceived","Document")',
+                { id: id, __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val() },
+                function (r) {
+                    if (r && !r.Errors) { KSwal.toast('success', 'Document marked received.'); refreshGrid(); loadStats(); }
+                    else { KSwal.error('Error', 'Failed to update document.'); }
+                });
+        });
+}
+function deleteDocument(id, docName) {
+    KSwal.confirmDelete('Delete Document?',
+        'Permanently remove <strong>' + docName + '</strong>? Any uploaded file will also be deleted.',
+        function () {
+            var grid = $('#main_grid').data('kendoGrid');
+            var item = grid.dataSource.get(id);
+            if (item) { grid.dataSource.remove(item); grid.dataSource.sync(); loadStats(); }
+        });
+}
+function getFilters() {
+    return {
+        search:           $('#querySearch').val().trim(),
+        category:         $('#queryCategory').data('kendoDropDownList') ? $('#queryCategory').data('kendoDropDownList').value() : '',
+        collectionStatus: $('#queryCollectionStatus').data('kendoDropDownList') ? $('#queryCollectionStatus').data('kendoDropDownList').value() : '',
+        isReceived:       $('#queryIsReceived').data('kendoDropDownList') ? $('#queryIsReceived').data('kendoDropDownList').value() : ''
+    };
+}
+function refreshGrid() {
+    var g = $('#main_grid').data('kendoGrid');
+    if (g) g.dataSource.query({ page: 1, pageSize: g.dataSource.pageSize(), sort: g.dataSource.sort() });
+}
+function clearFilters() {
+    $('#querySearch').val('');
+    ['#queryCategory','#queryCollectionStatus','#queryIsReceived'].forEach(function(id){
+        var d=$(id).data('kendoDropDownList'); if(d) d.value('');
+    });
+    refreshGrid();
+}
+function exportGrid() { var g=$('#main_grid').data('kendoGrid'); if(g){ g.saveAsExcel(); KSwal.toast('info','Exporting...'); } }
+function handleGridError(e) {
+    var msg='An error occurred.';
+    if(e.errors){ var p=[]; $.each(e.errors,function(k,v){ if(v.errors) p.push(v.errors.join('\n')); else if(typeof v==='string') p.push(v); }); if(p.length) msg=p.join('\n'); }
+    else if(e.xhr){ if(e.xhr.status===401) msg='Session expired.'; else if(e.xhr.status===403) msg='Access denied.'; else if(e.xhr.status===500) msg='Server error.'; }
+    KSwal.error('Grid Error', msg);
+}
+</script>
+}

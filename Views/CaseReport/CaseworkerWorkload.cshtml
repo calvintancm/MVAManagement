@@ -1,0 +1,207 @@
+@{
+    ViewData["Title"] = "Caseworker Workload";
+    ViewData["BreadcrumbSection"] = "Reports";
+    ViewData["BreadcrumbPage"] = "Caseworker Workload";
+
+    var caseworkers = ViewBag.Caseworkers as IEnumerable<MVAManagement.Models.MVA.CaseworkerProfile>
+                      ?? Enumerable.Empty<MVAManagement.Models.MVA.CaseworkerProfile>();
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Caseworker Workload</h1>
+        <p class="page-subtitle">Active case distribution by caseworker — identify imbalances at a glance</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-ptc-primary" onclick="runReport()">
+            <i class="bi bi-play-fill"></i> Run Report
+        </button>
+        <button class="btn-ptc-outline" id="btnExcel" onclick="exportExcel()" disabled>
+            <i class="bi bi-file-earmark-excel"></i> Export Excel
+        </button>
+    </div>
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title"><i class="bi bi-funnel"></i> Report Filters</h2>
+    </div>
+    <div class="ptc-card-body" style="padding:20px 24px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:18px;">
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:190px;">
+                <label class="filter-label">Filter to Specific Caseworker</label>
+                <select id="ddlCaseworker" style="width:190px;"></select>
+            </div>
+            <div style="padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="runReport()">
+                    <i class="bi bi-play-fill"></i> Generate
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Summary KPI strip *@
+<div id="kpiStrip" style="display:none;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;">
+    @foreach (var k in new[] {
+        new { Id="kpiCaseworkers",Label="Active Caseworkers",Icon="bi-people",         Color="#1d6fa4",Bg="#eff6ff" },
+        new { Id="kpiTotal",      Label="Total Cases",       Icon="bi-folder2-open",   Color="#7c3aed",Bg="#faf5ff" },
+        new { Id="kpiUnassigned", Label="Unassigned Cases",  Icon="bi-person-x",       Color="#dc2626",Bg="#fef2f2" },
+        new { Id="kpiAvg",        Label="Avg Cases / Person",Icon="bi-graph-up",       Color="#16a34a",Bg="#f0fdf4" },
+    })
+    {
+        <div class="ptc-card" style="padding:14px 18px;display:flex;align-items:center;gap:12px;border-left:4px solid @k.Color;">
+            <div style="width:38px;height:38px;border-radius:10px;background:@k.Bg;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="bi @k.Icon" style="font-size:18px;color:@k.Color;"></i>
+            </div>
+            <div>
+                <div id="@k.Id" style="font-size:1.4rem;font-weight:700;line-height:1;color:#0f172a;">—</div>
+                <div style="font-size:0.72rem;color:#64748b;margin-top:3px;">@k.Label</div>
+            </div>
+        </div>
+    }
+</div>
+
+@* Workload cards grid *@
+<div id="reportResults" style="display:none;">
+    <div id="workloadCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-bottom:18px;"></div>
+
+    @* Detail table *@
+    <div class="ptc-card">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-table"></i> Workload Detail Table</h2>
+            <span id="recordCount" class="record-count-badge">0 records</span>
+        </div>
+        <div class="ptc-card-body" style="padding:0;">
+            <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                    <thead>
+                        <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:left;">Caseworker</th>
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:left;">Role</th>
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:center;">Total</th>
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:center;">Active</th>
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:center;">Litigation</th>
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:center;">Hearings This Week</th>
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:right;">Total Claimed (MYR)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyWorkload"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="reportLoading" style="display:none;text-align:center;padding:48px;">
+    <div class="spinner-border text-primary" role="status" style="width:2.5rem;height:2.5rem;"></div>
+    <div style="margin-top:12px;color:#64748b;font-size:0.88rem;">Generating report...</div>
+</div>
+
+@section Scripts {
+<script>
+var caseworkers = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+    caseworkers.Select(c => new { c.Id, c.FullName })));
+
+$(function () {
+    kendo.culture('en-GB');
+    $('#ddlCaseworker').kendoDropDownList({
+        dataTextField:'FullName', dataValueField:'Id', optionLabel:'All Caseworkers',
+        dataSource: caseworkers || []
+    });
+    runReport();
+});
+
+function getParams() {
+    return {
+        caseworkerId: $('#ddlCaseworker').data('kendoDropDownList') ? $('#ddlCaseworker').data('kendoDropDownList').value() : '',
+        __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+    };
+}
+
+function runReport() {
+    $('#reportResults,#kpiStrip').hide();
+    $('#reportLoading').show();
+
+    $.post('@Url.Action("CaseworkerWorkloadData","Report")', getParams(), function (r) {
+        $('#reportLoading').hide();
+        if (!r || r.success === false) { KSwal.error('Error', r.message || 'Failed.'); return; }
+
+        $('#kpiCaseworkers').text(r.totalCaseworkers || 0);
+        $('#kpiTotal').text(r.totalCases || 0);
+        $('#kpiUnassigned').text(r.unassigned || 0);
+        var avg = r.totalCaseworkers > 0 ? (r.totalCases / r.totalCaseworkers).toFixed(1) : 0;
+        $('#kpiAvg').text(avg);
+        $('#kpiStrip').css('display','grid');
+        $('#recordCount').text((r.summary||[]).length + ' caseworkers');
+
+        // Workload cards
+        var cards = $('#workloadCards').empty();
+        var maxCases = Math.max.apply(null, (r.summary||[]).map(function(s){ return s.Total; })) || 1;
+
+        (r.summary || []).forEach(function(s) {
+            var pct = Math.round((s.Total / maxCases) * 100);
+            var barColor = pct > 80 ? '#dc2626' : pct > 60 ? '#d97706' : '#1d6fa4';
+            var statusRows = (s.ByStatus || []).map(function(bs){
+                return '<div style="display:flex;justify-content:space-between;font-size:0.75rem;padding:3px 0;border-bottom:1px solid #f1f5f9;">'
+                    + '<span style="color:#64748b;">' + $('<div>').text(bs.Status).html() + '</span>'
+                    + '<span style="font-weight:600;">' + bs.Count + '</span></div>';
+            }).join('');
+
+            cards.append(
+                '<div class="ptc-card" style="padding:0;overflow:hidden;">'
+                + '<div style="padding:16px 18px;border-bottom:1px solid #f1f5f9;">'
+                + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+                + '<div>'
+                + '<div style="font-weight:700;font-size:0.9rem;">' + $('<div>').text(s.CaseworkerName).html() + '</div>'
+                + '<div style="font-size:0.72rem;color:#64748b;">' + $('<div>').text(s.JobRole||'').html() + '</div>'
+                + '</div>'
+                + '<div style="text-align:right;">'
+                + '<div style="font-size:1.6rem;font-weight:800;color:' + barColor + ';line-height:1;">' + s.Total + '</div>'
+                + '<div style="font-size:0.68rem;color:#94a3b8;">cases</div>'
+                + '</div></div>'
+                + '<div style="height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden;">'
+                + '<div style="height:100%;width:' + pct + '%;background:' + barColor + ';border-radius:3px;transition:width 0.5s;"></div>'
+                + '</div></div>'
+                + '<div style="padding:10px 18px 14px;">'
+                + '<div style="display:flex;gap:16px;margin-bottom:8px;font-size:0.75rem;">'
+                + '<span style="color:#16a34a;"><i class="bi bi-circle-fill" style="font-size:7px;"></i> Active: <strong>' + s.Active + '</strong></span>'
+                + '<span style="color:#dc2626;"><i class="bi bi-circle-fill" style="font-size:7px;"></i> Litigation: <strong>' + s.InLitigation + '</strong></span>'
+                + '<span style="color:#d97706;"><i class="bi bi-calendar-week" style="font-size:10px;"></i> This week: <strong>' + s.HearingsDue + '</strong></span>'
+                + '</div>'
+                + statusRows
+                + '</div></div>'
+            );
+        });
+
+        // Detail table
+        var tbody = $('#tbodyWorkload').empty();
+        (r.summary || []).forEach(function(s, i) {
+            tbody.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + '">'
+                + '<td style="padding:9px 16px;font-weight:600;">' + $('<div>').text(s.CaseworkerName).html() + '</td>'
+                + '<td style="padding:9px 16px;font-size:0.8rem;color:#64748b;">' + $('<div>').text(s.JobRole||'').html() + '</td>'
+                + '<td style="padding:9px 16px;text-align:center;font-weight:700;font-size:1rem;">' + s.Total + '</td>'
+                + '<td style="padding:9px 16px;text-align:center;color:#16a34a;font-weight:600;">' + s.Active + '</td>'
+                + '<td style="padding:9px 16px;text-align:center;color:#dc2626;font-weight:600;">' + s.InLitigation + '</td>'
+                + '<td style="padding:9px 16px;text-align:center;color:#d97706;font-weight:600;">' + s.HearingsDue + '</td>'
+                + '<td style="padding:9px 16px;text-align:right;font-variant-numeric:tabular-nums;">RM ' + kendo.toString(s.TotalClaimed,'n2') + '</td>'
+                + '</tr>');
+        });
+
+        $('#reportResults').show();
+        $('#btnExcel').prop('disabled', false);
+    }).fail(function(){ $('#reportLoading').hide(); KSwal.error('Error','Server error.'); });
+}
+
+function exportExcel() {
+    var p = getParams();
+    var form = $('<form method="POST" action="@Url.Action("CaseworkerWorkloadExcel","Report")">');
+    $.each(p, function(k,v){ form.append($('<input type="hidden">').attr('name',k).val(v)); });
+    $('body').append(form); form.submit(); form.remove();
+    KSwal.toast('info','Preparing Excel file...');
+}
+</script>
+}

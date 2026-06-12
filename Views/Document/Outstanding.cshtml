@@ -1,0 +1,317 @@
+@{
+    ViewData["Title"] = "Outstanding Documents";
+    ViewData["BreadcrumbSection"] = "Case Management";
+    ViewData["BreadcrumbPage"] = "Outstanding Documents";
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Outstanding Documents</h1>
+        <p class="page-subtitle">Documents still awaiting collection across all active case files</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="@Url.Action("UploadDocument","Document")" class="btn-ptc-primary">
+            <i class="bi bi-upload"></i> Upload Document
+        </a>
+        <a href="@Url.Action("AllDocuments","Document")" class="btn-ptc-outline">
+            <i class="bi bi-folder2"></i> All Documents
+        </a>
+        <button class="btn-ptc-outline" onclick="exportGrid()">
+            <i class="bi bi-download"></i> Export
+        </button>
+    </div>
+</div>
+
+@* Info banner *@
+<div class="ptc-card mb-3" style="border-left:4px solid #dc2626;">
+    <div class="ptc-card-body" style="padding:12px 20px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+            <i class="bi bi-exclamation-triangle-fill" style="color:#dc2626;font-size:18px;flex-shrink:0;"></i>
+            <div style="font-size:0.8rem;color:var(--text-muted);line-height:1.6;">
+                Showing documents with status <strong>Awaiting</strong> or <strong>Requested</strong> only —
+                excludes <em>Not Required</em> and already <em>Received</em> items.
+                Click <strong>Mark Received</strong> once a document arrives, or
+                <strong>Upload</strong> to attach a digital copy directly.
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Urgency stat strip *@
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;">
+    @foreach (var s in new[] {
+        new { Id="osStatTotal",     Label="Total Outstanding", Icon="bi-hourglass-split",    Color="#dc2626", Bg="#fef2f2" },
+        new { Id="osStatAwaiting",  Label="Awaiting",          Icon="bi-clock",              Color="#d97706", Bg="#fffbeb" },
+        new { Id="osStatRequested", Label="Requested",         Icon="bi-send",               Color="#1d6fa4", Bg="#eff6ff" },
+        new { Id="osStatCases",     Label="Cases Affected",    Icon="bi-folder2-open",       Color="#7c3aed", Bg="#faf5ff" },
+    })
+    {
+        <div class="ptc-card" style="padding:14px 18px;display:flex;align-items:center;gap:12px;border-left:4px solid @s.Color;">
+            <div style="width:38px;height:38px;border-radius:10px;background:@s.Bg;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="bi @s.Icon" style="font-size:18px;color:@s.Color;"></i>
+            </div>
+            <div>
+                <div id="@s.Id" style="font-size:1.4rem;font-weight:700;line-height:1;color:#0f172a;">—</div>
+                <div style="font-size:0.72rem;color:#64748b;margin-top:3px;">@s.Label</div>
+            </div>
+        </div>
+    }
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-body" style="padding:16px 20px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;">
+            <div style="display:flex;flex-direction:column;gap:5px;flex:3;min-width:200px;">
+                <label class="filter-label">Search (File No / Claimant / Document / Source)</label>
+                <input type="text" id="querySearch" class="k-textbox"
+                       style="width:100%;max-width:300px;" placeholder="Search..." />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:145px;">
+                <label class="filter-label">Category</label>
+                <select id="queryCategory" style="width:145px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:145px;">
+                <label class="filter-label">Status</label>
+                <select id="queryCollectionStatus" style="width:145px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:145px;">
+                <label class="filter-label">Expected From</label>
+                <select id="queryExpectedFrom" style="width:145px;"></select>
+            </div>
+            <div style="display:flex;gap:8px;padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="refreshGrid()">
+                    <i class="bi bi-search"></i> Search
+                </button>
+                <button class="btn-ptc-outline" onclick="clearFilters()">
+                    <i class="bi bi-x-circle"></i> Clear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Grid Card *@
+<div class="ptc-card">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title"><i class="bi bi-file-earmark-x"></i> Awaiting Collection</h2>
+        <span id="recordCount" class="record-count-badge">0 records</span>
+    </div>
+    <div class="ptc-card-body" style="padding:0;">
+        <div id="main_grid"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+var docCategories      = ['Police','Medical','Legal','Insurance','Financial','Court','Other'];
+var pendingStatuses    = ['Awaiting','Requested'];
+var expectedFromList   = ['Client','Hospital','Police','Insurer','Court Registry','Solicitor','Other'];
+
+var categoryIconMap = {
+    'Police':    { icon:'bi-shield-check',     color:'#1d6fa4' },
+    'Medical':   { icon:'bi-heart-pulse',       color:'#dc2626' },
+    'Legal':     { icon:'bi-book',              color:'#7c3aed' },
+    'Insurance': { icon:'bi-file-earmark-lock', color:'#d97706' },
+    'Financial': { icon:'bi-cash-stack',        color:'#16a34a' },
+    'Court':     { icon:'bi-bank2',             color:'#0e7490' },
+    'Other':     { icon:'bi-file-earmark',      color:'#64748b' }
+};
+var statusColorMap = {
+    'Awaiting':  { bg:'#fef3c7', color:'#92400e' },
+    'Requested': { bg:'#dbeafe', color:'#1d40ae' }
+};
+
+$(function () {
+    kendo.culture('en-GB');
+
+    $('#queryCategory').kendoDropDownList({ dataSource: docCategories, optionLabel: 'All Categories' });
+    $('#queryCollectionStatus').kendoDropDownList({ dataSource: pendingStatuses, optionLabel: 'Awaiting + Requested' });
+    $('#queryExpectedFrom').kendoDropDownList({ dataSource: expectedFromList, optionLabel: 'All Sources' });
+    $('#querySearch').on('keypress', function(e){ if(e.which===13) refreshGrid(); });
+
+    var isMobile = window.innerWidth <= 576;
+
+    $('#main_grid').kendoGrid({
+        dataSource: {
+            transport: {
+                read: { url: '@Url.Action("DocumentRead","Document")', type: 'POST' },
+                parameterMap: function (data, operation) {
+                    var token = $('input[name="__RequestVerificationToken"]').val();
+                    if (operation === 'read')
+                        return $.extend({}, data, getFilters(), { scope: 'outstanding', __RequestVerificationToken: token });
+                    return $.extend({}, data, { __RequestVerificationToken: token });
+                }
+            },
+            schema: {
+                data: 'Data', total: 'Total', errors: 'Errors',
+                model: {
+                    id: 'Id',
+                    fields: {
+                        Id:               { type: 'number', editable: false },
+                        CollectionStatus: { type: 'string' },
+                        IsReceived:       { type: 'boolean' }
+                    }
+                }
+            },
+            pageSize: 15, serverPaging: true, serverSorting: true,
+            sort: { field: 'FileNumber', dir: 'asc' },
+            requestEnd: function (e) {
+                if (e.type === 'read' && e.response) {
+                    var t = e.response.Total || 0;
+                    $('#recordCount').text(t + ' record' + (t !== 1 ? 's' : ''));
+                    computeOutstandingStats(e.response.Data || []);
+                }
+            },
+            error: function (e) { handleGridError(e); }
+        },
+
+        columns: [
+            { field: 'Id', hidden: true },
+            {
+                // Category urgency bar
+                title: '', width: 8, sortable: false,
+                template: function (d) {
+                    var color = d.DocumentCategory === 'Medical' ? '#dc2626'
+                              : d.DocumentCategory === 'Legal'   ? '#7c3aed'
+                              : d.DocumentCategory === 'Court'   ? '#0e7490'
+                              : d.DocumentCategory === 'Police'  ? '#1d6fa4' : '#e2e8f0';
+                    return '<div style="width:4px;height:36px;border-radius:2px;background:' + color + ';margin:0 auto;"></div>';
+                }
+            },
+            {
+                field: 'FileNumber', title: 'Case File', width: 195, sortable: true,
+                template: function (d) {
+                    return '<a href="@Url.Action("EditCase","Case")?id=' + d.CaseFileId
+                         + '" style="font-family:monospace;font-weight:700;font-size:0.82rem;color:#1d6fa4;">'
+                         + kendo.htmlEncode(d.FileNumber || '') + '</a>'
+                         + '<div style="font-size:0.71rem;color:#64748b;margin-top:1px;">'
+                         + kendo.htmlEncode(d.ClaimantName || '') + '</div>';
+                }
+            },
+            {
+                field: 'DocumentCategory', title: 'Category', width: 115, sortable: true,
+                template: function (d) {
+                    var cat = categoryIconMap[d.DocumentCategory] || categoryIconMap['Other'];
+                    return '<span style="display:inline-flex;align-items:center;gap:5px;">'
+                         + '<i class="bi ' + cat.icon + '" style="font-size:13px;color:' + cat.color + ';"></i>'
+                         + '<span style="font-size:0.78rem;color:' + cat.color + ';font-weight:600;">'
+                         + kendo.htmlEncode(d.DocumentCategory || '') + '</span></span>';
+                }
+            },
+            {
+                field: 'DocumentName', title: 'Document', width: 240, sortable: true,
+                template: function (d) {
+                    return '<span style="font-weight:600;font-size:0.83rem;">'
+                         + kendo.htmlEncode(d.DocumentName || '') + '</span>';
+                }
+            },
+            {
+                field: 'ExpectedFrom', title: 'Expected From', width: 140, sortable: false,
+                template: function (d) {
+                    return d.ExpectedFrom
+                        ? '<span style="font-size:0.82rem;color:#475569;">'
+                          + kendo.htmlEncode(d.ExpectedFrom) + '</span>'
+                        : '<span style="color:#94a3b8;">—</span>';
+                }
+            },
+            {
+                field: 'CollectionStatus', title: 'Status', width: 120,
+                attributes: { style: 'text-align:center;' },
+                template: function (d) {
+                    var s = statusColorMap[d.CollectionStatus] || { bg:'#e2e8f0', color:'#475569' };
+                    return '<span style="background:' + s.bg + ';color:' + s.color
+                         + ';padding:2px 9px;border-radius:20px;font-size:0.71rem;font-weight:700;">'
+                         + kendo.htmlEncode(d.CollectionStatus || '') + '</span>';
+                }
+            },
+            {
+                field: 'Remarks', title: 'Remarks', width: 200, hidden: isMobile, sortable: false,
+                template: function (d) {
+                    if (!d.Remarks) return '<span style="color:#94a3b8;">—</span>';
+                    var t = d.Remarks.length > 50 ? d.Remarks.substring(0,50) + '…' : d.Remarks;
+                    return '<span style="font-size:0.8rem;" title="' + kendo.htmlEncode(d.Remarks) + '">'
+                         + kendo.htmlEncode(t) + '</span>';
+                }
+            },
+            {
+                title: 'Actions', width: 210, sortable: false,
+                template: function (d) {
+                    var editUrl   = '@Url.Action("EditDocument","Document")?id=' + d.Id;
+                    var uploadUrl = '@Url.Action("UploadDocument","Document")?caseFileId=' + d.CaseFileId;
+                    return '<div style="display:flex;align-items:center;gap:5px;">'
+                         + '<button onclick="markReceived(' + d.Id + ',\'' + kendo.htmlEncode(d.DocumentName || '') + '\')" '
+                         + 'style="display:inline-flex;align-items:center;gap:4px;border:none;background:#dcfce7;'
+                         + 'color:#166534;font-size:12px;font-weight:600;padding:3px 9px;border-radius:6px;cursor:pointer;">'
+                         + '<i class="bi bi-check-circle"></i> Received</button>'
+                         + '<a href="' + editUrl + '" class="btn btn-sm" style="padding:3px 8px;font-size:12px;background:#e0e7ff;border:none;color:#3730a3;" title="Edit"><i class="bi bi-pencil"></i></a>'
+                         + '<a href="' + uploadUrl + '" class="btn btn-sm" style="padding:3px 8px;font-size:12px;background:#dbeafe;border:none;color:#1d40ae;" title="Upload File"><i class="bi bi-upload"></i></a>'
+                         + '</div>';
+                }
+            }
+        ],
+
+        editable: false,
+        pageable: { pageSize: 15, pageSizes: [15, 30, 50], buttonCount: 5 },
+        sortable: true, scrollable: true, height: 540,
+        dataBound: function () {
+            this.thead.find('th').css({ background:'#f8fafc','font-weight':'600','font-size':'0.77rem',color:'#475569','border-color':'#e2e8f0' });
+        }
+    });
+
+    refreshGrid();
+});
+
+function computeOutstandingStats(rows) {
+    var awaiting  = rows.filter(function(r){ return r.CollectionStatus === 'Awaiting'; }).length;
+    var requested = rows.filter(function(r){ return r.CollectionStatus === 'Requested'; }).length;
+    var cases     = new Set(rows.map(function(r){ return r.CaseFileId; })).size;
+    $('#osStatTotal').text(rows.length);
+    $('#osStatAwaiting').text(awaiting);
+    $('#osStatRequested').text(requested);
+    $('#osStatCases').text(cases);
+}
+
+function markReceived(id, docName) {
+    KSwal.confirm('Mark Received?',
+        'Confirm that <strong>' + docName + '</strong> has been received by the firm.',
+        'Yes, Mark Received',
+        function () {
+            $.post('@Url.Action("DocumentMarkReceived","Document")',
+                { id: id, __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val() },
+                function (r) {
+                    if (r && !r.Errors) { KSwal.toast('success', 'Document marked received.'); refreshGrid(); }
+                    else { KSwal.error('Error', 'Failed to update document.'); }
+                });
+        });
+}
+function getFilters() {
+    return {
+        search:           $('#querySearch').val().trim(),
+        category:         $('#queryCategory').data('kendoDropDownList') ? $('#queryCategory').data('kendoDropDownList').value() : '',
+        collectionStatus: $('#queryCollectionStatus').data('kendoDropDownList') ? $('#queryCollectionStatus').data('kendoDropDownList').value() : '',
+        expectedFrom:     $('#queryExpectedFrom').data('kendoDropDownList') ? $('#queryExpectedFrom').data('kendoDropDownList').value() : ''
+    };
+}
+function refreshGrid() {
+    var g = $('#main_grid').data('kendoGrid');
+    if (g) g.dataSource.query({ page: 1, pageSize: g.dataSource.pageSize(), sort: g.dataSource.sort() });
+}
+function clearFilters() {
+    $('#querySearch').val('');
+    ['#queryCategory','#queryCollectionStatus','#queryExpectedFrom'].forEach(function(id){
+        var d=$(id).data('kendoDropDownList'); if(d) d.value('');
+    });
+    refreshGrid();
+}
+function exportGrid() { var g=$('#main_grid').data('kendoGrid'); if(g){ g.saveAsExcel(); KSwal.toast('info','Exporting...'); } }
+function handleGridError(e) {
+    var msg='An error occurred.';
+    if(e.errors){ var p=[]; $.each(e.errors,function(k,v){ if(v.errors) p.push(v.errors.join('\n')); else if(typeof v==='string') p.push(v); }); if(p.length) msg=p.join('\n'); }
+    else if(e.xhr){ if(e.xhr.status===401) msg='Session expired.'; else if(e.xhr.status===403) msg='Access denied.'; else if(e.xhr.status===500) msg='Server error.'; }
+    KSwal.error('Grid Error', msg);
+}
+</script>
+}

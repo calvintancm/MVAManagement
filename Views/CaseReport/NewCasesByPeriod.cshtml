@@ -1,0 +1,278 @@
+@{
+    ViewData["Title"] = "New Cases by Period";
+    ViewData["BreadcrumbSection"] = "Reports";
+    ViewData["BreadcrumbPage"] = "New Cases by Period";
+
+    var caseworkers = ViewBag.Caseworkers as IEnumerable<MVAManagement.Models.MVA.CaseworkerProfile>
+                      ?? Enumerable.Empty<MVAManagement.Models.MVA.CaseworkerProfile>();
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">New Cases by Period</h1>
+        <p class="page-subtitle">Case intake trends by month, quarter, or year — with referral source breakdown</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-ptc-primary" onclick="runReport()">
+            <i class="bi bi-play-fill"></i> Run Report
+        </button>
+        <button class="btn-ptc-outline" id="btnExcel" onclick="exportExcel()" disabled>
+            <i class="bi bi-file-earmark-excel"></i> Export Excel
+        </button>
+    </div>
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title"><i class="bi bi-funnel"></i> Report Filters</h2>
+    </div>
+    <div class="ptc-card-body" style="padding:20px 24px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:18px;">
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:150px;">
+                <label class="filter-label">Date From</label>
+                <input type="text" id="dtFrom" class="k-textbox" style="width:150px;" placeholder="dd/MM/yyyy" />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:150px;">
+                <label class="filter-label">Date To</label>
+                <input type="text" id="dtTo" class="k-textbox" style="width:150px;" placeholder="dd/MM/yyyy" />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:155px;">
+                <label class="filter-label">Group By</label>
+                <select id="ddlGroupBy" style="width:155px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:175px;">
+                <label class="filter-label">Caseworker</label>
+                <select id="ddlCaseworker" style="width:175px;"></select>
+            </div>
+            <div style="padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="runReport()">
+                    <i class="bi bi-play-fill"></i> Generate
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* KPI strip *@
+<div id="kpiStrip" style="display:none;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;">
+    @foreach (var k in new[] {
+        new { Id="kpiTotal",  Label="Total Cases",      Icon="bi-folder-plus",     Color="#1d6fa4", Bg="#eff6ff" },
+        new { Id="kpiPeriods",Label="Periods",           Icon="bi-calendar3",       Color="#7c3aed", Bg="#faf5ff" },
+        new { Id="kpiLit",    Label="In Litigation",     Icon="bi-bank2",           Color="#dc2626", Bg="#fef2f2" },
+        new { Id="kpiClaimed",Label="Total Claimed",     Icon="bi-currency-exchange",Color="#16a34a",Bg="#f0fdf4" },
+    })
+    {
+        <div class="ptc-card" style="padding:14px 18px;display:flex;align-items:center;gap:12px;border-left:4px solid @k.Color;">
+            <div style="width:38px;height:38px;border-radius:10px;background:@k.Bg;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="bi @k.Icon" style="font-size:18px;color:@k.Color;"></i>
+            </div>
+            <div>
+                <div id="@k.Id" style="font-size:1.3rem;font-weight:700;line-height:1;color:#0f172a;">—</div>
+                <div style="font-size:0.72rem;color:#64748b;margin-top:3px;">@k.Label</div>
+            </div>
+        </div>
+    }
+</div>
+
+<div id="reportResults" style="display:none;">
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:18px;margin-bottom:18px;">
+
+        @* Period trend table *@
+        <div class="ptc-card">
+            <div class="ptc-card-header">
+                <h2 class="ptc-card-title"><i class="bi bi-graph-up-arrow"></i> Intake by Period</h2>
+            </div>
+            <div class="ptc-card-body" style="padding:0;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                    <thead>
+                        <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:left;">Period</th>
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:center;">New Cases</th>
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:center;">In Litigation</th>
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:right;">Claimed (MYR)</th>
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:left;" style="min-width:100px;">Trend</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyPeriod"></tbody>
+                </table>
+            </div>
+        </div>
+
+        @* Referral source table *@
+        <div class="ptc-card">
+            <div class="ptc-card-header">
+                <h2 class="ptc-card-title"><i class="bi bi-signpost-split"></i> Referral Sources</h2>
+            </div>
+            <div class="ptc-card-body" style="padding:0;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                    <thead>
+                        <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:left;">Source</th>
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:center;">Count</th>
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:left;">Share</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyReferral"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    @* Case detail table *@
+    <div class="ptc-card">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-list-ul"></i> Case Detail</h2>
+            <span id="recordCount" class="record-count-badge">0 records</span>
+        </div>
+        <div class="ptc-card-body" style="padding:0;">
+            <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                    <thead>
+                        <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">File No.</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Claimant</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Status</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Caseworker</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Referral Source</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Accident Date</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Opened On</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:right;">Claimed (MYR)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyDetail"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="reportLoading" style="display:none;text-align:center;padding:48px;">
+    <div class="spinner-border text-primary" role="status" style="width:2.5rem;height:2.5rem;"></div>
+    <div style="margin-top:12px;color:#64748b;font-size:0.88rem;">Generating report...</div>
+</div>
+
+@section Scripts {
+<script>
+var caseworkers = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+    caseworkers.Select(c => new { c.Id, c.FullName })));
+
+$(function () {
+    kendo.culture('en-GB');
+    $('#dtFrom,#dtTo').kendoDatePicker({ format:'dd/MM/yyyy', culture:'en-GB' });
+
+    // Default: last 12 months
+    var now = new Date();
+    $('#dtFrom').data('kendoDatePicker').value(new Date(now.getFullYear()-1, now.getMonth(), 1));
+    $('#dtTo').data('kendoDatePicker').value(now);
+
+    $('#ddlGroupBy').kendoDropDownList({
+        dataTextField:'text', dataValueField:'value',
+        dataSource:[
+            { text:'By Month',   value:'month'   },
+            { text:'By Quarter', value:'quarter' },
+            { text:'By Year',    value:'year'    }
+        ],
+        value: 'month'
+    });
+    $('#ddlCaseworker').kendoDropDownList({
+        dataTextField:'FullName', dataValueField:'Id', optionLabel:'All Caseworkers',
+        dataSource: caseworkers || []
+    });
+    runReport();
+});
+
+function getParams() {
+    var dpFrom = $('#dtFrom').data('kendoDatePicker');
+    var dpTo   = $('#dtTo').data('kendoDatePicker');
+    return {
+        dateFrom:     dpFrom && dpFrom.value() ? dpFrom.value().toISOString() : '',
+        dateTo:       dpTo   && dpTo.value()   ? dpTo.value().toISOString()   : '',
+        groupBy:      $('#ddlGroupBy').data('kendoDropDownList') ? $('#ddlGroupBy').data('kendoDropDownList').value() : 'month',
+        caseworkerId: $('#ddlCaseworker').data('kendoDropDownList') ? $('#ddlCaseworker').data('kendoDropDownList').value() : '',
+        __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+    };
+}
+
+function runReport() {
+    $('#reportResults,#kpiStrip').hide();
+    $('#reportLoading').show();
+
+    $.post('@Url.Action("NewCasesByPeriodData","Report")', getParams(), function (r) {
+        $('#reportLoading').hide();
+        if (!r || r.success === false) { KSwal.error('Error', r.message || 'Failed.'); return; }
+
+        $('#kpiTotal').text(r.total || 0);
+        $('#kpiPeriods').text((r.periods||[]).length);
+        $('#kpiLit').text((r.rows||[]).filter(function(x){ return x.IsInLitigation; }).length);
+        $('#kpiClaimed').text('RM ' + kendo.toString((r.rows||[]).reduce(function(a,x){ return a+(x.ClaimedAmount||0); },0),'n2'));
+        $('#kpiStrip').css('display','grid');
+        $('#recordCount').text((r.total||0) + ' records');
+
+        // Period trend table with mini bar
+        var tbody = $('#tbodyPeriod').empty();
+        var maxCount = Math.max.apply(null, (r.periods||[]).map(function(p){ return p.Count; })) || 1;
+        (r.periods || []).forEach(function(p, i) {
+            var barPct = Math.round((p.Count / maxCount) * 100);
+            tbody.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + '">'
+                + '<td style="padding:9px 16px;font-weight:600;">' + $('<div>').text(p.Period).html() + '</td>'
+                + '<td style="padding:9px 16px;text-align:center;font-weight:700;font-size:1rem;">' + p.Count + '</td>'
+                + '<td style="padding:9px 16px;text-align:center;color:#dc2626;">' + p.InLitigation + '</td>'
+                + '<td style="padding:9px 16px;text-align:right;font-variant-numeric:tabular-nums;">RM ' + kendo.toString(p.TotalClaimed,'n2') + '</td>'
+                + '<td style="padding:9px 16px;">'
+                + '<div style="height:8px;background:#e2e8f0;border-radius:4px;min-width:60px;">'
+                + '<div style="height:100%;width:' + barPct + '%;background:#1d6fa4;border-radius:4px;"></div>'
+                + '</div></td></tr>');
+        });
+
+        // Referral sources
+        var total = r.total || 1;
+        var tbody2 = $('#tbodyReferral').empty();
+        (r.byReferral || []).forEach(function(ref, i) {
+            var pct = ((ref.Count / total) * 100).toFixed(1);
+            tbody2.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + '">'
+                + '<td style="padding:9px 16px;">' + $('<div>').text(ref.Source).html() + '</td>'
+                + '<td style="padding:9px 16px;text-align:center;font-weight:700;">' + ref.Count + '</td>'
+                + '<td style="padding:9px 16px;">'
+                + '<div style="display:flex;align-items:center;gap:6px;">'
+                + '<div style="height:6px;flex:1;background:#e2e8f0;border-radius:3px;">'
+                + '<div style="height:100%;width:' + pct + '%;background:#7c3aed;border-radius:3px;"></div></div>'
+                + '<span style="font-size:0.72rem;color:#64748b;min-width:32px;">' + pct + '%</span>'
+                + '</div></td></tr>');
+        });
+
+        // Detail rows
+        var tbody3 = $('#tbodyDetail').empty();
+        (r.rows || []).forEach(function(c, i) {
+            var accDate   = c.AccidentDate ? kendo.toString(kendo.parseDate(c.AccidentDate),'dd/MM/yyyy') : '—';
+            var openedDate = c.OpenedDate  ? kendo.toString(kendo.parseDate(c.OpenedDate),'dd/MM/yyyy')  : '—';
+            tbody3.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + '">'
+                + '<td style="padding:8px 14px;"><a href="@Url.Action("EditCase","Case")?id=' + c.Id
+                + '" style="font-family:monospace;font-weight:700;font-size:0.82rem;color:#1d6fa4;">'
+                + $('<div>').text(c.FileNumber||'').html() + '</a></td>'
+                + '<td style="padding:8px 14px;">' + $('<div>').text(c.PrimaryClaimantName||'').html() + '</td>'
+                + '<td style="padding:8px 14px;font-size:0.8rem;">' + $('<div>').text(c.StatusName||'').html() + '</td>'
+                + '<td style="padding:8px 14px;font-size:0.8rem;">' + $('<div>').text(c.CaseworkerName||'').html() + '</td>'
+                + '<td style="padding:8px 14px;font-size:0.8rem;color:#64748b;">' + $('<div>').text(c.ReferralSource||'Not Specified').html() + '</td>'
+                + '<td style="padding:8px 14px;text-align:center;">' + accDate + '</td>'
+                + '<td style="padding:8px 14px;text-align:center;">' + openedDate + '</td>'
+                + '<td style="padding:8px 14px;text-align:right;font-variant-numeric:tabular-nums;">RM '
+                + kendo.toString(c.ClaimedAmount,'n2') + '</td></tr>');
+        });
+
+        $('#reportResults').show();
+        $('#btnExcel').prop('disabled', false);
+    }).fail(function(){ $('#reportLoading').hide(); KSwal.error('Error','Server error.'); });
+}
+
+function exportExcel() {
+    var p = getParams();
+    var form = $('<form method="POST" action="@Url.Action("NewCasesByPeriodExcel","Report")">');
+    $.each(p, function(k,v){ form.append($('<input type="hidden">').attr('name',k).val(v)); });
+    $('body').append(form); form.submit(); form.remove();
+    KSwal.toast('info','Preparing Excel file...');
+}
+</script>
+}

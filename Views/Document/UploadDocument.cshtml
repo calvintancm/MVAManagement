@@ -1,0 +1,357 @@
+@model MVAManagement.Models.MVA.CaseDocument
+@{
+    var isEdit = Model.Id > 0;
+    ViewData["Title"]             = isEdit ? "Edit Document" : "Upload Document";
+    ViewData["BreadcrumbSection"] = "Case Management";
+    ViewData["BreadcrumbPage"]    = isEdit ? "Edit Document" : "Upload Document";
+
+    var caseFiles = ViewBag.CaseFiles as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+
+    // Pre-fill caseFileId from query string (used when clicking Upload from Outstanding grid)
+    var qsCaseFileId = Context.Request.Query["caseFileId"].ToString();
+
+    string formAction = isEdit
+        ? Url.Action("DocumentUpdate", "Document")
+        : Url.Action("DocumentCreate", "Document");
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">@(isEdit ? "Edit Document Record" : "Upload / Register Document")</h1>
+        <p class="page-subtitle">@(isEdit ? $"Editing document #{Model.Id}" : "Add a document entry to a case file — upload optional")</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="@Url.Action("AllDocuments","Document")" class="btn-ptc-outline">
+            <i class="bi bi-arrow-left"></i> Back to All Documents
+        </a>
+    </div>
+</div>
+
+@if (TempData["Error"] != null)
+{
+    <div class="ptc-alert-danger mb-3"><i class="bi bi-exclamation-triangle-fill"></i> @TempData["Error"]</div>
+}
+
+@* Info banner *@
+<div class="ptc-card mb-3" style="border-left:4px solid #1d6fa4;">
+    <div class="ptc-card-body" style="padding:12px 20px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+            <i class="bi bi-info-circle-fill" style="color:#1d6fa4;font-size:18px;flex-shrink:0;"></i>
+            <div style="font-size:0.8rem;color:var(--text-muted);line-height:1.6;">
+                You can register a document entry <strong>without a file</strong> (status: Awaiting / Requested)
+                and upload the digital copy later. Accepted formats: PDF, JPG, PNG, GIF, DOC, DOCX — max <strong>10 MB</strong>.
+            </div>
+        </div>
+    </div>
+</div>
+
+<form method="post" action="@formAction" id="docForm" enctype="multipart/form-data" autocomplete="off">
+    @Html.AntiForgeryToken()
+    @if (isEdit)
+    {
+        <input type="hidden" name="Id" value="@Model.Id" />
+    }
+
+    @* ── SECTION 1: Case File Link ────────────────────────────────────── *@
+    <div class="ptc-card mb-3">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-folder2-open"></i> Case File</h2>
+        </div>
+        <div class="ptc-card-body" style="padding:20px 24px;">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Case File <span class="text-danger">*</span></label>
+                    @if (isEdit)
+                    {
+                        <div class="k-textbox" style="background:#f8fafc;font-family:monospace;font-weight:700;color:#1d6fa4;">
+                            @(Model.CaseFile?.FileNumber ?? $"Case #{Model.CaseFileId}")
+                            @if (Model.CaseFile != null)
+                            {
+                                <span style="font-family:inherit;font-weight:400;color:#64748b;margin-left:10px;">
+                                    — @Model.CaseFile.PrimaryClaimantName
+                                </span>
+                            }
+                        </div>
+                        <input type="hidden" name="CaseFileId" value="@Model.CaseFileId" />
+                    }
+                    else
+                    {
+                        <select id="ddlCaseFile" style="width:100%;"></select>
+                        <small class="text-muted">Only active, open case files are listed</small>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── SECTION 2: Document Details ──────────────────────────────────── *@
+    <div class="ptc-card mb-3">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-file-earmark-text"></i> Document Details</h2>
+        </div>
+        <div class="ptc-card-body" style="padding:20px 24px;">
+            <div class="row g-3">
+                <div class="col-md-5">
+                    <label class="form-label fw-semibold">Document Name <span class="text-danger">*</span></label>
+                    <input type="text" name="DocumentName" class="k-textbox w-100" required
+                           value="@Model.DocumentName"
+                           placeholder="e.g. Police Report, Hospital Case Note, Specialist Medical Report" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Category <span class="text-danger">*</span></label>
+                    <select id="ddlCategory" style="width:100%;"></select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Expected From</label>
+                    <select id="ddlExpectedFrom" style="width:100%;"></select>
+                    <small class="text-muted">Party responsible for supplying this document</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── SECTION 3: Collection Status ────────────────────────────────── *@
+    <div class="ptc-card mb-3">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-clipboard-check"></i> Collection Status</h2>
+        </div>
+        <div class="ptc-card-body" style="padding:20px 24px;">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Collection Status</label>
+                    <select id="ddlCollectionStatus" style="width:100%;"></select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Received Date</label>
+                    <input type="text" id="dtReceived" class="k-textbox w-100"
+                           value="@(Model.ReceivedDate.HasValue ? Model.ReceivedDate.Value.ToString("dd/MM/yyyy") : "")"
+                           placeholder="dd/MM/yyyy" />
+                </div>
+                <div class="col-md-12" style="padding-top:4px;">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                        <input type="checkbox" name="IsReceived" id="chkReceived" value="true"
+                               @(Model.IsReceived ? "checked" : "")
+                               style="width:16px;height:16px;" />
+                        <input type="hidden" name="IsReceived" value="false" />
+                        <span class="fw-semibold" style="font-size:0.88rem;">Mark as Received</span>
+                        <span style="font-size:0.78rem;color:#64748b;">— tick when document arrives at the firm</span>
+                    </label>
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label fw-semibold">Remarks</label>
+                    <textarea name="Remarks" class="k-textbox w-100" rows="2"
+                              placeholder="e.g. Pages 3–5 missing. Re-requested 14/06/2025.">@Model.Remarks</textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── SECTION 4: Digital Copy Upload ──────────────────────────────── *@
+    <div class="ptc-card mb-4">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-cloud-upload"></i> Digital Copy</h2>
+            <span style="font-size:0.76rem;color:#94a3b8;font-style:italic;">Optional — PDF, JPG, PNG, GIF, DOC, DOCX · max 10 MB</span>
+        </div>
+        <div class="ptc-card-body" style="padding:20px 24px;">
+            @if (isEdit && !string.IsNullOrWhiteSpace(Model.DigitalStoragePath))
+            {
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:12px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">
+                    <i class="bi bi-file-earmark-check-fill" style="color:#16a34a;font-size:20px;"></i>
+                    <div>
+                        <div style="font-size:0.83rem;font-weight:600;color:#166534;">File already attached</div>
+                        <a href="@Model.DigitalStoragePath" target="_blank"
+                           style="font-size:0.78rem;color:#1d6fa4;">
+                            <i class="bi bi-download"></i> @(Model.OriginalFileName ?? "Download file")
+                        </a>
+                    </div>
+                    <span style="font-size:0.75rem;color:#64748b;margin-left:auto;">Upload a new file below to replace</span>
+                </div>
+            }
+
+            @* Drop zone *@
+            <div id="dropZone"
+                 style="border:2px dashed #cbd5e1;border-radius:12px;padding:36px 24px;text-align:center;
+                        cursor:pointer;transition:border-color 0.2s,background 0.2s;background:#fafafa;"
+                 onclick="document.getElementById('fileInput').click()"
+                 ondragover="handleDragOver(event)"
+                 ondragleave="handleDragLeave(event)"
+                 ondrop="handleDrop(event)">
+                <i class="bi bi-cloud-upload" style="font-size:36px;color:#94a3b8;display:block;margin-bottom:10px;"></i>
+                <div style="font-size:0.9rem;font-weight:600;color:#475569;margin-bottom:4px;">
+                    Click to browse or drag &amp; drop a file here
+                </div>
+                <div style="font-size:0.78rem;color:#94a3b8;">PDF, JPG, PNG, GIF, DOC, DOCX — max 10 MB</div>
+                <div id="filePreview" style="display:none;margin-top:14px;"></div>
+            </div>
+
+            <input type="file" id="fileInput" name="uploadedFile"
+                   accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx"
+                   style="display:none;" onchange="handleFileSelected(this)" />
+        </div>
+    </div>
+
+    @* ── Submit Bar ───────────────────────────────────────────────────── *@
+    <div style="display:flex;align-items:center;gap:12px;justify-content:flex-end;padding-bottom:24px;">
+        <a href="@Url.Action("AllDocuments","Document")" class="btn-ptc-outline">
+            <i class="bi bi-x-circle"></i> Cancel
+        </a>
+        <button type="submit" class="btn-ptc-primary" id="btnSubmit">
+            <i class="bi @(isEdit ? "bi-floppy2" : "bi-cloud-upload")"></i>
+            @(isEdit ? "Save Changes" : "Save Document")
+        </button>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+var allCaseFiles = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.CaseFiles));
+var qsCaseFileId = '@Html.Raw(qsCaseFileId)';
+
+$(function () {
+    kendo.culture('en-GB');
+
+    // ── Case file dropdown (create only) ──────────────────────────────
+    @if (!isEdit)
+    {
+        <text>
+        var cfSource = (allCaseFiles || []).map(function(c){
+            return { text: c.FileNumber + ' — ' + c.PrimaryClaimantName, value: c.Id };
+        });
+        $('#ddlCaseFile').kendoDropDownList({
+            dataTextField: 'text', dataValueField: 'value',
+            dataSource: cfSource, optionLabel: '— Select Case File —',
+            filter: 'contains',
+            value: qsCaseFileId || null
+        });
+        </text>
+    }
+
+    // ── Category dropdown ─────────────────────────────────────────────
+    $('#ddlCategory').kendoDropDownList({
+        dataSource: ['Police','Medical','Legal','Insurance','Financial','Court','Other'],
+        value: '@Html.Raw(Model.DocumentCategory ?? "Other")'
+    });
+
+    // ── Expected From dropdown ────────────────────────────────────────
+    $('#ddlExpectedFrom').kendoDropDownList({
+        dataSource: ['Client','Hospital','Police','Insurer','Court Registry','Solicitor','Other'],
+        optionLabel: '— Select Source —',
+        value: '@Html.Raw(Model.ExpectedFrom ?? "")'
+    });
+
+    // ── Collection Status dropdown ────────────────────────────────────
+    $('#ddlCollectionStatus').kendoDropDownList({
+        dataSource: ['Awaiting','Requested','Received','Reviewed','Not Required'],
+        value: '@Html.Raw(Model.CollectionStatus ?? "Awaiting")'
+    });
+
+    // ── Received date picker ──────────────────────────────────────────
+    $('#dtReceived').kendoDatePicker({ format: 'dd/MM/yyyy', culture: 'en-GB' });
+
+    // ── IsReceived auto-sync with status ─────────────────────────────
+    $('#chkReceived').on('change', function () {
+        var ddl = $('#ddlCollectionStatus').data('kendoDropDownList');
+        if ($(this).is(':checked')) {
+            if (ddl && ddl.value() === 'Awaiting') ddl.value('Received');
+            if (!$('#dtReceived').val()) {
+                $('#dtReceived').data('kendoDatePicker').value(new Date());
+            }
+        }
+    });
+
+    // ── Submit guard ──────────────────────────────────────────────────
+    $('#docForm').on('submit', function () {
+        $('input[name="DocumentCategory"]').remove();
+        $('input[name="ExpectedFrom"]').remove();
+        $('input[name="CollectionStatus"]').remove();
+        @if (!isEdit)
+        {
+            <text>$('input[name="CaseFileId"]').remove();</text>
+        }
+
+        var inject = function(name, val) {
+            $('<input type="hidden">').attr('name', name).val(val || '').appendTo('#docForm');
+        };
+        inject('DocumentCategory',  $('#ddlCategory').data('kendoDropDownList').value());
+        inject('ExpectedFrom',      $('#ddlExpectedFrom').data('kendoDropDownList').value());
+        inject('CollectionStatus',  $('#ddlCollectionStatus').data('kendoDropDownList').value());
+        @if (!isEdit)
+        {
+            <text>inject('CaseFileId', $('#ddlCaseFile').data('kendoDropDownList').value());</text>
+        }
+
+        // Fix date
+        $('input[name="ReceivedDate"]').remove();
+        var dp  = $('#dtReceived').data('kendoDatePicker');
+        var val = dp && dp.value() ? dp.value().toISOString() : '';
+        $('<input type="hidden">').attr('name', 'ReceivedDate').val(val).appendTo('#docForm');
+
+        $('#btnSubmit').prop('disabled', true).html('<i class="bi bi-hourglass-split"></i> Saving...');
+    });
+});
+
+// ── Drop zone handlers ─────────────────────────────────────────────────
+function handleDragOver(e) {
+    e.preventDefault();
+    $('#dropZone').css({ 'border-color':'#1d6fa4', 'background':'#eff6ff' });
+}
+function handleDragLeave(e) {
+    $('#dropZone').css({ 'border-color':'#cbd5e1', 'background':'#fafafa' });
+}
+function handleDrop(e) {
+    e.preventDefault();
+    $('#dropZone').css({ 'border-color':'#cbd5e1', 'background':'#fafafa' });
+    var files = e.dataTransfer.files;
+    if (files.length > 0) {
+        document.getElementById('fileInput').files = files;
+        handleFileSelected(document.getElementById('fileInput'));
+    }
+}
+function handleFileSelected(input) {
+    if (!input.files || !input.files[0]) return;
+    var file = input.files[0];
+    var maxBytes = 10 * 1024 * 1024;
+
+    if (file.size > maxBytes) {
+        KSwal.error('File Too Large', 'Maximum file size is 10 MB. Your file is ' + (file.size / 1048576).toFixed(1) + ' MB.');
+        input.value = '';
+        return;
+    }
+
+    var allowed = ['application/pdf','image/jpeg','image/png','image/gif',
+                   'application/msword',
+                   'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (!allowed.includes(file.type)) {
+        KSwal.error('Invalid File Type', 'Only PDF, JPG, PNG, GIF, DOC, and DOCX files are allowed.');
+        input.value = '';
+        return;
+    }
+
+    // Show preview
+    var sizeStr = file.size > 1048576
+        ? (file.size / 1048576).toFixed(1) + ' MB'
+        : (file.size / 1024).toFixed(0) + ' KB';
+    var icon = file.type === 'application/pdf' ? 'bi-file-earmark-pdf'
+             : file.type.startsWith('image/')  ? 'bi-file-earmark-image'
+             : 'bi-file-earmark-word';
+
+    $('#filePreview').html(
+        '<div style="display:inline-flex;align-items:center;gap:8px;background:#eff6ff;'
+        + 'padding:8px 16px;border-radius:8px;border:1px solid #bfdbfe;">'
+        + '<i class="bi ' + icon + '" style="font-size:20px;color:#1d6fa4;"></i>'
+        + '<div style="text-align:left;">'
+        + '<div style="font-size:0.83rem;font-weight:600;color:#1e40af;">' + $('<div>').text(file.name).html() + '</div>'
+        + '<div style="font-size:0.72rem;color:#64748b;">' + sizeStr + '</div>'
+        + '</div></div>'
+    ).show();
+
+    // Auto-set status to Received and tick checkbox
+    var ddl = $('#ddlCollectionStatus').data('kendoDropDownList');
+    if (ddl) ddl.value('Received');
+    $('#chkReceived').prop('checked', true);
+    if (!$('#dtReceived').val()) {
+        $('#dtReceived').data('kendoDatePicker').value(new Date());
+    }
+}
+</script>
+}

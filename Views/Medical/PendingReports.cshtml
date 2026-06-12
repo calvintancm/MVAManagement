@@ -1,0 +1,315 @@
+@{
+    ViewData["Title"] = "Pending Reports";
+    ViewData["BreadcrumbSection"] = "Case Management";
+    ViewData["BreadcrumbPage"] = "Pending Reports";
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Pending Medical Reports</h1>
+        <p class="page-subtitle">Injuries where a medical report has not yet been received</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="@Url.Action("InjuryRecords","Medical")" class="btn-ptc-outline">
+            <i class="bi bi-clipboard2-pulse"></i> All Injuries
+        </a>
+        <button class="btn-ptc-outline" onclick="exportGrid()">
+            <i class="bi bi-download"></i> Export
+        </button>
+    </div>
+</div>
+
+@* Info banner *@
+<div class="ptc-card mb-3" style="border-left:4px solid #d97706;">
+    <div class="ptc-card-body" style="padding:12px 20px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+            <i class="bi bi-hourglass-split" style="color:#d97706;font-size:18px;flex-shrink:0;"></i>
+            <div style="font-size:0.8rem;color:var(--text-muted);line-height:1.6;">
+                Showing injuries with report status <strong>Pending</strong> or <strong>Requested</strong> only.
+                Use the <strong>Mark Received</strong> button once the medical report arrives.
+                To view all injuries including received reports, go to
+                <a href="@Url.Action("InjuryRecords","Medical")" style="color:#1d6fa4;">Injury Records</a>.
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Urgency stat strip *@
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;">
+    @foreach (var s in new[] {
+        new { Id="prStatTotal",     Label="Total Pending",      Icon="bi-hourglass-split",    Color="#d97706", Bg="#fffbeb" },
+        new { Id="prStatPending",   Label="Status: Pending",    Icon="bi-clock",              Color="#dc2626", Bg="#fef2f2" },
+        new { Id="prStatRequested", Label="Status: Requested",  Icon="bi-send",               Color="#1d6fa4", Bg="#eff6ff" },
+        new { Id="prStatSevere",    Label="Severe / Critical",  Icon="bi-exclamation-triangle",Color="#7c3aed",Bg="#faf5ff" },
+    })
+    {
+        <div class="ptc-card" style="padding:14px 18px;display:flex;align-items:center;gap:12px;border-left:4px solid @s.Color;">
+            <div style="width:38px;height:38px;border-radius:10px;background:@s.Bg;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="bi @s.Icon" style="font-size:18px;color:@s.Color;"></i>
+            </div>
+            <div>
+                <div id="@s.Id" style="font-size:1.4rem;font-weight:700;line-height:1;color:#0f172a;">—</div>
+                <div style="font-size:0.72rem;color:#64748b;margin-top:3px;">@s.Label</div>
+            </div>
+        </div>
+    }
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-body" style="padding:16px 20px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;">
+            <div style="display:flex;flex-direction:column;gap:5px;flex:3;min-width:200px;">
+                <label class="filter-label">Search (File No / Claimant / Injury / Doctor)</label>
+                <input type="text" id="querySearch" class="k-textbox"
+                       style="width:100%;max-width:300px;" placeholder="Search..." />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:145px;">
+                <label class="filter-label">Report Status</label>
+                <select id="queryReportStatus" style="width:145px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:145px;">
+                <label class="filter-label">Severity</label>
+                <select id="querySeverity" style="width:145px;"></select>
+            </div>
+            <div style="display:flex;gap:8px;padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="refreshGrid()">
+                    <i class="bi bi-search"></i> Search
+                </button>
+                <button class="btn-ptc-outline" onclick="clearFilters()">
+                    <i class="bi bi-x-circle"></i> Clear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Grid Card *@
+<div class="ptc-card">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title"><i class="bi bi-file-earmark-medical"></i> Awaiting Medical Reports</h2>
+        <span id="recordCount" class="record-count-badge">0 records</span>
+    </div>
+    <div class="ptc-card-body" style="padding:0;">
+        <div id="main_grid"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+var severityLevels  = ['Minor','Moderate','Severe','Permanent Disability','Fatal'];
+var pendingStatuses = ['Pending','Requested'];
+
+var severityColorMap = {
+    'Minor':                { bg:'#dcfce7', color:'#166534' },
+    'Moderate':             { bg:'#fef9c3', color:'#854d0e' },
+    'Severe':               { bg:'#fee2e2', color:'#991b1b' },
+    'Permanent Disability': { bg:'#fce7f3', color:'#9d174d' },
+    'Fatal':                { bg:'#1e293b', color:'#f1f5f9' }
+};
+var reportColorMap = {
+    'Pending':   { bg:'#fef3c7', color:'#92400e' },
+    'Requested': { bg:'#dbeafe', color:'#1d40ae' }
+};
+
+$(function () {
+    kendo.culture('en-GB');
+
+    $('#queryReportStatus').kendoDropDownList({
+        dataSource: pendingStatuses, optionLabel: 'Pending + Requested'
+    });
+    $('#querySeverity').kendoDropDownList({
+        dataSource: severityLevels, optionLabel: 'All Severities'
+    });
+    $('#querySearch').on('keypress', function(e){ if(e.which===13) refreshGrid(); });
+
+    var isMobile = window.innerWidth <= 576;
+
+    $('#main_grid').kendoGrid({
+        dataSource: {
+            transport: {
+                read: { url: '@Url.Action("InjuryRead","Medical")', type: 'POST' },
+                parameterMap: function (data, operation) {
+                    var token = $('input[name="__RequestVerificationToken"]').val();
+                    if (operation === 'read')
+                        return $.extend({}, data, getFilters(), { scope: 'pending', __RequestVerificationToken: token });
+                    return $.extend({}, data, { __RequestVerificationToken: token });
+                }
+            },
+            schema: {
+                data: 'Data', total: 'Total', errors: 'Errors',
+                model: {
+                    id: 'Id',
+                    fields: {
+                        Id:                   { type: 'number', editable: false },
+                        SeverityLevel:        { type: 'string' },
+                        MedicalReportStatus:  { type: 'string' },
+                        IsPermanentDisability:{ type: 'boolean' }
+                    }
+                }
+            },
+            pageSize: 15, serverPaging: true, serverSorting: true,
+            sort: { field: 'SeverityLevel', dir: 'desc' },
+            requestEnd: function (e) {
+                if (e.type === 'read' && e.response) {
+                    var t = e.response.Total || 0;
+                    $('#recordCount').text(t + ' record' + (t !== 1 ? 's' : ''));
+                    computePendingStats(e.response.Data || []);
+                }
+            },
+            error: function (e) { handleGridError(e); }
+        },
+
+        columns: [
+            { field: 'Id', hidden: true },
+            {
+                // Severity urgency bar
+                title: '', width: 8, sortable: false,
+                template: function (d) {
+                    var color = d.SeverityLevel === 'Severe' || d.SeverityLevel === 'Fatal' ? '#dc2626'
+                              : d.SeverityLevel === 'Permanent Disability' ? '#7c3aed'
+                              : d.SeverityLevel === 'Moderate' ? '#d97706' : '#e2e8f0';
+                    return '<div style="width:4px;height:36px;border-radius:2px;background:' + color + ';margin:0 auto;"></div>';
+                }
+            },
+            {
+                field: 'FileNumber', title: 'Case File', width: 195, sortable: true,
+                template: function (d) {
+                    return '<a href="@Url.Action("EditCase","Case")?id=' + d.CaseFileId
+                         + '" style="font-family:monospace;font-weight:700;font-size:0.82rem;color:#1d6fa4;">'
+                         + kendo.htmlEncode(d.FileNumber || '') + '</a>'
+                         + '<div style="font-size:0.71rem;color:#64748b;margin-top:1px;">'
+                         + kendo.htmlEncode(d.ClaimantName || '') + '</div>';
+                }
+            },
+            {
+                field: 'InjuryDescription', title: 'Injury', width: 235,
+                template: function (d) {
+                    var perm = d.IsPermanentDisability
+                        ? ' <span style="background:#fce7f3;color:#9d174d;font-size:0.65rem;padding:1px 6px;border-radius:10px;font-weight:700;">PERM</span>'
+                        : '';
+                    var bp = d.BodyPart ? '<div style="font-size:0.71rem;color:#64748b;">' + kendo.htmlEncode(d.BodyPart) + '</div>' : '';
+                    return '<span style="font-weight:600;font-size:0.83rem;">' + kendo.htmlEncode(d.InjuryDescription || '') + '</span>' + perm + bp;
+                }
+            },
+            {
+                field: 'SeverityLevel', title: 'Severity', width: 150,
+                template: function (d) {
+                    var s = severityColorMap[d.SeverityLevel] || { bg:'#e2e8f0', color:'#475569' };
+                    return '<span style="background:' + s.bg + ';color:' + s.color
+                         + ';padding:2px 9px;border-radius:20px;font-size:0.71rem;font-weight:700;">'
+                         + kendo.htmlEncode(d.SeverityLevel || '') + '</span>';
+                }
+            },
+            {
+                field: 'DoctorName', title: 'Doctor / Hospital', width: 200, hidden: isMobile,
+                template: function (d) {
+                    var doc  = d.DoctorName   ? '<span style="font-size:0.82rem;">' + kendo.htmlEncode(d.DoctorName) + '</span>' : '';
+                    var spec = d.MedicalSpecialty ? ' <span style="font-size:0.68rem;color:#7c3aed;">(' + kendo.htmlEncode(d.MedicalSpecialty) + ')</span>' : '';
+                    var hosp = d.HospitalName ? '<div style="font-size:0.71rem;color:#64748b;">' + kendo.htmlEncode(d.HospitalName) + '</div>' : '';
+                    return (doc || '<span style="color:#94a3b8;">—</span>') + spec + hosp;
+                }
+            },
+            {
+                field: 'MedicalReportStatus', title: 'Report Status', width: 125,
+                attributes: { style: 'text-align:center;' },
+                template: function (d) {
+                    var s = reportColorMap[d.MedicalReportStatus] || { bg:'#e2e8f0', color:'#475569' };
+                    return '<span style="background:' + s.bg + ';color:' + s.color
+                         + ';padding:2px 9px;border-radius:20px;font-size:0.71rem;font-weight:700;">'
+                         + kendo.htmlEncode(d.MedicalReportStatus || '') + '</span>';
+                }
+            },
+            {
+                field: 'TreatmentStatus', title: 'Treatment', width: 155, hidden: isMobile,
+                template: function (d) {
+                    var color = d.TreatmentStatus === 'Ongoing'    ? '#d97706'
+                              : d.TreatmentStatus === 'Discharged' ? '#16a34a'
+                              : d.TreatmentStatus === 'Completed'  ? '#1d6fa4' : '#64748b';
+                    return '<span style="font-size:0.82rem;color:' + color + ';font-weight:600;">'
+                         + kendo.htmlEncode(d.TreatmentStatus || '') + '</span>';
+                }
+            },
+            {
+                title: 'Actions', width: 170, sortable: false,
+                template: function (d) {
+                    var editUrl = '@Url.Action("InjuryRecords","Medical")';
+                    var markBtn = '<button onclick="markReceived(' + d.Id + ',\'' + kendo.htmlEncode(d.InjuryDescription || '') + '\')" '
+                        + 'style="display:inline-flex;align-items:center;gap:4px;border:none;'
+                        + 'background:#dcfce7;color:#166534;font-size:12px;font-weight:600;'
+                        + 'padding:3px 10px;border-radius:6px;cursor:pointer;" '
+                        + 'title="Mark Report Received">'
+                        + '<i class="bi bi-check-circle"></i> Mark Received</button>';
+                    return '<div style="display:flex;align-items:center;gap:6px;">' + markBtn + '</div>';
+                }
+            }
+        ],
+
+        editable: false,
+        pageable: { pageSize: 15, pageSizes: [15, 30, 50], buttonCount: 5 },
+        sortable: true, scrollable: true, height: 520,
+        dataBound: function () {
+            this.thead.find('th').css({ background:'#f8fafc','font-weight':'600','font-size':'0.77rem',color:'#475569','border-color':'#e2e8f0' });
+        }
+    });
+
+    refreshGrid();
+});
+
+function computePendingStats(rows) {
+    var pending   = rows.filter(function(r){ return r.MedicalReportStatus === 'Pending'; }).length;
+    var requested = rows.filter(function(r){ return r.MedicalReportStatus === 'Requested'; }).length;
+    var severe    = rows.filter(function(r){
+        return r.SeverityLevel === 'Severe' || r.SeverityLevel === 'Fatal' || r.SeverityLevel === 'Permanent Disability';
+    }).length;
+    $('#prStatTotal').text(rows.length);
+    $('#prStatPending').text(pending);
+    $('#prStatRequested').text(requested);
+    $('#prStatSevere').text(severe);
+}
+
+function markReceived(id, injuryDesc) {
+    KSwal.confirm('Mark Report Received?',
+        'Confirm that the medical report for <strong>' + injuryDesc + '</strong> has been received.',
+        'Yes, Mark Received',
+        function () {
+            $.post('@Url.Action("InjuryMarkReportReceived","Medical")',
+                { id: id, __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val() },
+                function (r) {
+                    if (r && !r.Errors) {
+                        KSwal.toast('success', 'Report marked as received.');
+                        refreshGrid();
+                    } else {
+                        KSwal.error('Error', 'Failed to update report status.');
+                    }
+                });
+        });
+}
+
+function getFilters() {
+    return {
+        search:       $('#querySearch').val().trim(),
+        reportStatus: $('#queryReportStatus').data('kendoDropDownList') ? $('#queryReportStatus').data('kendoDropDownList').value() : '',
+        severity:     $('#querySeverity').data('kendoDropDownList') ? $('#querySeverity').data('kendoDropDownList').value() : ''
+    };
+}
+function refreshGrid() {
+    var g = $('#main_grid').data('kendoGrid');
+    if (g) g.dataSource.query({ page: 1, pageSize: g.dataSource.pageSize(), sort: g.dataSource.sort() });
+}
+function clearFilters() {
+    $('#querySearch').val('');
+    ['#queryReportStatus','#querySeverity'].forEach(function(id){ var d=$(id).data('kendoDropDownList'); if(d) d.value(''); });
+    refreshGrid();
+}
+function exportGrid() { var g=$('#main_grid').data('kendoGrid'); if(g){ g.saveAsExcel(); KSwal.toast('info','Exporting...'); } }
+function handleGridError(e) {
+    var msg='An error occurred.';
+    if(e.errors){ var p=[]; $.each(e.errors,function(k,v){ if(v.errors) p.push(v.errors.join('\n')); else if(typeof v==='string') p.push(v); }); if(p.length) msg=p.join('\n'); }
+    else if(e.xhr){ if(e.xhr.status===401) msg='Session expired.'; else if(e.xhr.status===403) msg='Access denied.'; else if(e.xhr.status===500) msg='Server error.'; }
+    KSwal.error('Grid Error', msg);
+}
+</script>
+}

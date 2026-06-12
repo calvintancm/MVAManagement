@@ -1,0 +1,216 @@
+@{
+    ViewData["Title"] = "Case Age & Limitation Alert";
+    ViewData["BreadcrumbSection"] = "Reports";
+    ViewData["BreadcrumbPage"] = "Case Age & Limitation Alert";
+
+    var caseworkers = ViewBag.Caseworkers as IEnumerable<MVAManagement.Models.MVA.CaseworkerProfile>
+                      ?? Enumerable.Empty<MVAManagement.Models.MVA.CaseworkerProfile>();
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Case Age &amp; Limitation Alert</h1>
+        <p class="page-subtitle">Open cases approaching or past the 6-year statute of limitations deadline</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-ptc-primary" onclick="runReport()">
+            <i class="bi bi-play-fill"></i> Run Report
+        </button>
+        <button class="btn-ptc-outline" id="btnExcel" onclick="exportExcel()" disabled>
+            <i class="bi bi-file-earmark-excel"></i> Export Excel
+        </button>
+    </div>
+</div>
+
+@* Alert legend *@
+<div class="ptc-card mb-3" style="border-left:4px solid #dc2626;">
+    <div class="ptc-card-body" style="padding:12px 20px;">
+        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;font-size:0.8rem;">
+            <span><i class="bi bi-info-circle-fill" style="color:#1d6fa4;"></i> Alert levels based on days remaining to 6-year limitation:</span>
+            <span style="background:#fee2e2;color:#991b1b;padding:2px 10px;border-radius:20px;font-weight:700;font-size:0.72rem;">EXPIRED</span>
+            <span style="color:#64748b;font-size:0.78rem;">Deadline passed &amp; not in litigation</span>
+            <span style="background:#fef3c7;color:#92400e;padding:2px 10px;border-radius:20px;font-weight:700;font-size:0.72rem;">URGENT</span>
+            <span style="color:#64748b;font-size:0.78rem;">≤ 180 days remaining</span>
+            <span style="background:#fefce8;color:#713f12;padding:2px 10px;border-radius:20px;font-weight:700;font-size:0.72rem;">WARNING</span>
+            <span style="color:#64748b;font-size:0.78rem;">181 – 365 days remaining</span>
+        </div>
+    </div>
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title"><i class="bi bi-funnel"></i> Report Filters</h2>
+    </div>
+    <div class="ptc-card-body" style="padding:20px 24px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:18px;">
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:175px;">
+                <label class="filter-label">Caseworker</label>
+                <select id="ddlCaseworker" style="width:175px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:175px;">
+                <label class="filter-label">Alert Level</label>
+                <select id="ddlAlertFilter" style="width:175px;"></select>
+            </div>
+            <div style="padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="runReport()">
+                    <i class="bi bi-play-fill"></i> Generate
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* KPI strip *@
+<div id="kpiStrip" style="display:none;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;">
+    @foreach (var k in new[] {
+        new { Id="kpiExpired", Label="Expired",          Icon="bi-x-circle-fill",       Color="#dc2626", Bg="#fef2f2" },
+        new { Id="kpiUrgent",  Label="Urgent (≤ 180d)",  Icon="bi-exclamation-triangle", Color="#d97706", Bg="#fffbeb" },
+        new { Id="kpiWarning", Label="Warning (≤ 365d)", Icon="bi-exclamation-circle",   Color="#ca8a04", Bg="#fefce8" },
+        new { Id="kpiSafe",    Label="Safe",              Icon="bi-shield-check",         Color="#16a34a", Bg="#f0fdf4" },
+    })
+    {
+        <div class="ptc-card" style="padding:14px 18px;display:flex;align-items:center;gap:12px;border-left:4px solid @k.Color;">
+            <div style="width:38px;height:38px;border-radius:10px;background:@k.Bg;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="bi @k.Icon" style="font-size:18px;color:@k.Color;"></i>
+            </div>
+            <div>
+                <div id="@k.Id" style="font-size:1.4rem;font-weight:700;line-height:1;color:#0f172a;">—</div>
+                <div style="font-size:0.72rem;color:#64748b;margin-top:3px;">@k.Label</div>
+            </div>
+        </div>
+    }
+</div>
+
+@* Results table *@
+<div id="reportResults" style="display:none;">
+    <div class="ptc-card">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-clock-history"></i> Case Age Detail</h2>
+            <span id="recordCount" class="record-count-badge">0 records</span>
+        </div>
+        <div class="ptc-card-body" style="padding:0;">
+            <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.82rem;" id="tblAge">
+                    <thead>
+                        <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Alert</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">File No.</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Claimant</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Status</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Caseworker</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Accident Date</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Age (Days)</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Limit Deadline</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Days Left</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Litigation</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyAge"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="reportLoading" style="display:none;text-align:center;padding:48px;">
+    <div class="spinner-border text-primary" role="status" style="width:2.5rem;height:2.5rem;"></div>
+    <div style="margin-top:12px;color:#64748b;font-size:0.88rem;">Generating report...</div>
+</div>
+
+@section Scripts {
+<script>
+var caseworkers = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+    caseworkers.Select(c => new { c.Id, c.FullName })));
+
+$(function () {
+    kendo.culture('en-GB');
+    $('#ddlCaseworker').kendoDropDownList({
+        dataTextField:'FullName', dataValueField:'Id', optionLabel:'All Caseworkers',
+        dataSource: caseworkers || []
+    });
+    $('#ddlAlertFilter').kendoDropDownList({
+        dataTextField:'text', dataValueField:'value', optionLabel:'All Levels',
+        dataSource:[
+            { text:'Expired Only',  value:'expired' },
+            { text:'Urgent Only',   value:'urgent'  },
+            { text:'Warning Only',  value:'warning' }
+        ]
+    });
+    runReport();
+});
+
+function getParams() {
+    return {
+        caseworkerId: $('#ddlCaseworker').data('kendoDropDownList') ? $('#ddlCaseworker').data('kendoDropDownList').value() : '',
+        alertFilter:  $('#ddlAlertFilter').data('kendoDropDownList') ? $('#ddlAlertFilter').data('kendoDropDownList').value() : '',
+        __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+    };
+}
+
+function runReport() {
+    $('#reportResults,#kpiStrip').hide();
+    $('#reportLoading').show();
+
+    $.post('@Url.Action("CaseAgeData","Report")', getParams(), function (r) {
+        $('#reportLoading').hide();
+        if (!r || r.success === false) { KSwal.error('Error', r.message || 'Failed.'); return; }
+
+        $('#kpiExpired').text(r.expired || 0);
+        $('#kpiUrgent').text(r.urgent   || 0);
+        $('#kpiWarning').text(r.warning  || 0);
+        $('#kpiSafe').text(r.safe      || 0);
+        $('#kpiStrip').css('display','grid');
+        $('#recordCount').text((r.total||0) + ' records');
+
+        var tbody = $('#tbodyAge').empty();
+        (r.rows || []).forEach(function(row) {
+            var alert = row.IsExpired ? 'EXPIRED' : row.IsUrgent ? 'URGENT' : row.IsWarning ? 'WARNING' : 'OK';
+            var alertBadge = alert === 'EXPIRED'
+                ? '<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:20px;font-size:0.7rem;font-weight:700;">EXPIRED</span>'
+                : alert === 'URGENT'
+                ? '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:20px;font-size:0.7rem;font-weight:700;">URGENT</span>'
+                : alert === 'WARNING'
+                ? '<span style="background:#fefce8;color:#713f12;padding:2px 8px;border-radius:20px;font-size:0.7rem;font-weight:700;">WARNING</span>'
+                : '<span style="color:#16a34a;font-size:0.75rem;font-weight:600;">OK</span>';
+
+            var rowBg = alert==='EXPIRED' ? '#fff5f5' : alert==='URGENT' ? '#fffbeb' : alert==='WARNING' ? '#fefce8' : '';
+            var daysLeft = row.DaysToLimitation !== null
+                ? '<span style="font-weight:700;color:' + (row.IsExpired?'#dc2626':row.IsUrgent?'#d97706':'#64748b') + ';">'
+                  + row.DaysToLimitation + '</span>'
+                : '—';
+            var accDate = row.AccidentDate ? kendo.toString(kendo.parseDate(row.AccidentDate),'dd/MM/yyyy') : '—';
+            var limDate = row.LimitationDeadline ? kendo.toString(kendo.parseDate(row.LimitationDeadline),'dd/MM/yyyy') : '—';
+
+            tbody.append('<tr style="border-bottom:1px solid #f1f5f9;' + (rowBg?'background:'+rowBg+';':'') + '">'
+                + '<td style="padding:9px 14px;">' + alertBadge + '</td>'
+                + '<td style="padding:9px 14px;"><a href="@Url.Action("EditCase","Case")?id=' + row.Id
+                + '" style="font-family:monospace;font-weight:700;font-size:0.82rem;color:#1d6fa4;">'
+                + $('<div>').text(row.FileNumber||'').html() + '</a></td>'
+                + '<td style="padding:9px 14px;">' + $('<div>').text(row.PrimaryClaimantName||'').html() + '</td>'
+                + '<td style="padding:9px 14px;font-size:0.8rem;">' + $('<div>').text(row.StatusName||'').html() + '</td>'
+                + '<td style="padding:9px 14px;font-size:0.8rem;">' + $('<div>').text(row.CaseworkerName||'').html() + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;">' + accDate + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;font-weight:600;">' + row.AgeInDays + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;">' + limDate + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;">' + daysLeft + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;">' + (row.IsInLitigation?'<span style="background:#fee2e2;color:#991b1b;padding:2px 7px;border-radius:20px;font-size:0.7rem;font-weight:700;">Yes</span>':'<span style="color:#94a3b8;">No</span>') + '</td>'
+                + '</tr>');
+        });
+
+        $('#reportResults').show();
+        $('#btnExcel').prop('disabled', false);
+    }).fail(function(){ $('#reportLoading').hide(); KSwal.error('Error','Server error.'); });
+}
+
+function exportExcel() {
+    var p = getParams();
+    var form = $('<form method="POST" action="@Url.Action("CaseAgeExcel","Report")">');
+    $.each(p, function(k,v){ form.append($('<input type="hidden">').attr('name',k).val(v)); });
+    $('body').append(form); form.submit(); form.remove();
+    KSwal.toast('info','Preparing Excel file...');
+}
+</script>
+}

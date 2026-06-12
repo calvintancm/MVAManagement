@@ -19,7 +19,7 @@ namespace MVAManagement.Models.MVA
 
         public bool IsActive { get; set; } = true;
 
-        public bool IsMandatory { get; set; } = true;
+
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
