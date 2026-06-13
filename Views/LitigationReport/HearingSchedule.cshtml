@@ -1,0 +1,300 @@
+@{
+    ViewData["Title"] = "Hearing Schedule Report";
+    ViewData["BreadcrumbSection"] = "Reports";
+    ViewData["BreadcrumbPage"] = "Hearing Schedule";
+
+    var caseworkers   = ViewBag.Caseworkers   as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var courtVenues   = ViewBag.CourtVenues   as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var hearingStages = ViewBag.HearingStages as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Hearing Schedule Report</h1>
+        <p class="page-subtitle">Pending court dates grouped by venue or caseworker — printable court diary</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-ptc-primary" onclick="runReport()">
+            <i class="bi bi-play-fill"></i> Run Report
+        </button>
+        <button class="btn-ptc-outline" id="btnExcel" onclick="exportExcel()" disabled>
+            <i class="bi bi-file-earmark-excel"></i> Export Excel
+        </button>
+    </div>
+</div>
+
+@* Colour legend *@
+<div class="ptc-card mb-3" style="border-left:4px solid #0e7490;">
+    <div class="ptc-card-body" style="padding:12px 20px;">
+        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;font-size:0.8rem;">
+            <span><i class="bi bi-info-circle-fill" style="color:#0e7490;"></i> Row highlights:</span>
+            <span style="background:#dbeafe;border:1px solid #93c5fd;padding:2px 10px;border-radius:6px;font-size:0.78rem;">Today</span>
+            <span style="background:#fef9c3;border:1px solid #fcd34d;padding:2px 10px;border-radius:6px;font-size:0.78rem;">Within 7 Days</span>
+        </div>
+    </div>
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title"><i class="bi bi-funnel"></i> Report Filters</h2>
+    </div>
+    <div class="ptc-card-body" style="padding:20px 24px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:18px;">
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:150px;">
+                <label class="filter-label">Date From</label>
+                <input type="text" id="dtFrom" class="k-textbox" style="width:150px;" placeholder="dd/MM/yyyy" />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:150px;">
+                <label class="filter-label">Date To</label>
+                <input type="text" id="dtTo" class="k-textbox" style="width:150px;" placeholder="dd/MM/yyyy" />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:175px;">
+                <label class="filter-label">Caseworker</label>
+                <select id="ddlCaseworker" style="width:175px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:200px;">
+                <label class="filter-label">Court Venue</label>
+                <select id="ddlVenue" style="width:200px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:175px;">
+                <label class="filter-label">Hearing Stage</label>
+                <select id="ddlStage" style="width:175px;"></select>
+            </div>
+            <div style="padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="runReport()">
+                    <i class="bi bi-play-fill"></i> Generate
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* KPI strip *@
+<div id="kpiStrip" style="display:none;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;">
+    @foreach (var k in new[] {
+        new { Id="kpiTotal",  Label="Total Hearings",   Icon="bi-journal-text",    Color="#0e7490", Bg="#ecfeff" },
+        new { Id="kpiToday",  Label="Today",            Icon="bi-alarm",           Color="#dc2626", Bg="#fef2f2" },
+        new { Id="kpiWeek",   Label="This Week",        Icon="bi-calendar-week",   Color="#d97706", Bg="#fffbeb" },
+        new { Id="kpiVenues", Label="Court Venues",     Icon="bi-geo-alt",         Color="#7c3aed", Bg="#faf5ff" },
+    })
+    {
+        <div class="ptc-card" style="padding:14px 18px;display:flex;align-items:center;gap:12px;border-left:4px solid @k.Color;">
+            <div style="width:38px;height:38px;border-radius:10px;background:@k.Bg;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="bi @k.Icon" style="font-size:18px;color:@k.Color;"></i>
+            </div>
+            <div>
+                <div id="@k.Id" style="font-size:1.4rem;font-weight:700;line-height:1;color:#0f172a;">—</div>
+                <div style="font-size:0.72rem;color:#64748b;margin-top:3px;">@k.Label</div>
+            </div>
+        </div>
+    }
+</div>
+
+<div id="reportResults" style="display:none;">
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-bottom:18px;">
+        @* By Venue *@
+        <div class="ptc-card">
+            <div class="ptc-card-header">
+                <h2 class="ptc-card-title"><i class="bi bi-geo-alt"></i> By Venue</h2>
+            </div>
+            <div class="ptc-card-body" style="padding:0;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                    <thead>
+                        <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                            <th style="padding:9px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Venue</th>
+                            <th style="padding:9px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Hearings</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyVenue"></tbody>
+                </table>
+            </div>
+        </div>
+        @* By Stage *@
+        <div class="ptc-card">
+            <div class="ptc-card-header">
+                <h2 class="ptc-card-title"><i class="bi bi-tags"></i> By Stage</h2>
+            </div>
+            <div class="ptc-card-body" style="padding:0;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                    <thead>
+                        <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                            <th style="padding:9px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Stage</th>
+                            <th style="padding:9px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Count</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyStage"></tbody>
+                </table>
+            </div>
+        </div>
+        @* By Caseworker *@
+        <div class="ptc-card">
+            <div class="ptc-card-header">
+                <h2 class="ptc-card-title"><i class="bi bi-person"></i> By Caseworker</h2>
+            </div>
+            <div class="ptc-card-body" style="padding:0;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                    <thead>
+                        <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                            <th style="padding:9px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Caseworker</th>
+                            <th style="padding:9px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Hearings</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyCaseworker"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    @* Schedule detail *@
+    <div class="ptc-card">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-calendar-event"></i> Hearing Schedule Detail</h2>
+            <span id="recordCount" class="record-count-badge">0 records</span>
+        </div>
+        <div class="ptc-card-body" style="padding:0;max-height:520px;overflow-y:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                <thead style="position:sticky;top:0;z-index:1;">
+                    <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Date</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Time</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">File No.</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Claimant</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Caseworker</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Stage</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Venue</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Room</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Judge</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Days</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodySchedule"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="reportLoading" style="display:none;text-align:center;padding:48px;">
+    <div class="spinner-border text-primary" role="status" style="width:2.5rem;height:2.5rem;"></div>
+    <div style="margin-top:12px;color:#64748b;font-size:0.88rem;">Generating report...</div>
+</div>
+
+@section Scripts {
+<script>
+var caseworkers   = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(caseworkers.Select(c => new { Id = (int)c.Id, FullName = (string)c.FullName })));
+var courtVenues   = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(courtVenues.Select(v => new { Id = (int)v.Id, VenueName = (string)v.VenueName })));
+var hearingStages = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(hearingStages.Select(s => new { Id = (int)s.Id, Label = (string)s.StageCode + " — " + (string)s.StageDescription })));
+
+$(function () {
+    kendo.culture('en-GB');
+    $('#dtFrom,#dtTo').kendoDatePicker({ format:'dd/MM/yyyy', culture:'en-GB' });
+
+    // Default: today to +90 days
+    var now = new Date();
+    $('#dtFrom').data('kendoDatePicker').value(now);
+    var end = new Date(now); end.setDate(end.getDate() + 90);
+    $('#dtTo').data('kendoDatePicker').value(end);
+
+    $('#ddlCaseworker').kendoDropDownList({ dataTextField:'FullName',  dataValueField:'Id', optionLabel:'All Caseworkers', dataSource: caseworkers   || [] });
+    $('#ddlVenue').kendoDropDownList({      dataTextField:'VenueName', dataValueField:'Id', optionLabel:'All Venues',      dataSource: courtVenues   || [] });
+    $('#ddlStage').kendoDropDownList({      dataTextField:'Label',     dataValueField:'Id', optionLabel:'All Stages',      dataSource: hearingStages || [] });
+
+    runReport();
+});
+
+function getParams() {
+    var dpFrom = $('#dtFrom').data('kendoDatePicker');
+    var dpTo   = $('#dtTo').data('kendoDatePicker');
+    return {
+        dateFrom:     dpFrom && dpFrom.value() ? dpFrom.value().toISOString() : '',
+        dateTo:       dpTo   && dpTo.value()   ? dpTo.value().toISOString()   : '',
+        caseworkerId: $('#ddlCaseworker').data('kendoDropDownList') ? $('#ddlCaseworker').data('kendoDropDownList').value() : '',
+        venueId:      $('#ddlVenue').data('kendoDropDownList') ? $('#ddlVenue').data('kendoDropDownList').value() : '',
+        stageId:      $('#ddlStage').data('kendoDropDownList') ? $('#ddlStage').data('kendoDropDownList').value() : '',
+        __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+    };
+}
+
+function runReport() {
+    $('#reportResults,#kpiStrip').hide();
+    $('#reportLoading').show();
+
+    $.post('@Url.Action("HearingScheduleData","LitigationReport")', getParams(), function (r) {
+        $('#reportLoading').hide();
+        if (!r || r.success === false) { KSwal.error('Error', r.message || 'Failed.'); return; }
+
+        $('#kpiTotal').text(r.total    || 0);
+        $('#kpiToday').text(r.todayCount || 0);
+        $('#kpiWeek').text(r.weekCount  || 0);
+        $('#kpiVenues').text(r.venueCount || 0);
+        $('#kpiStrip').css('display','grid');
+        $('#recordCount').text((r.total||0) + ' records');
+
+        // By venue
+        var tbody = $('#tbodyVenue').empty();
+        (r.byVenue || []).forEach(function(v, i) {
+            tbody.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + '">'
+                + '<td style="padding:9px 14px;">' + $('<div>').text(v.Venue).html() + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;font-weight:700;">' + v.Count + '</td></tr>');
+        });
+
+        // By stage
+        var tbody2 = $('#tbodyStage').empty();
+        (r.byStage || []).forEach(function(s, i) {
+            tbody2.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + '">'
+                + '<td style="padding:9px 14px;font-size:0.8rem;">' + $('<div>').text(s.Stage).html() + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;font-weight:700;">' + s.Count + '</td></tr>');
+        });
+
+        // By caseworker
+        var tbody3 = $('#tbodyCaseworker').empty();
+        (r.byCaseworker || []).forEach(function(c, i) {
+            tbody3.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + '">'
+                + '<td style="padding:9px 14px;">' + $('<div>').text(c.Caseworker).html() + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;font-weight:700;">' + c.Count + '</td></tr>');
+        });
+
+        // Schedule detail
+        var tbody4 = $('#tbodySchedule').empty();
+        (r.rows || []).forEach(function(h, i) {
+            var rowBg = h.IsToday ? '#dbeafe' : h.IsThisWeek ? '#fef9c3' : (i%2===0?'':'#f8fafc');
+            var dateStr = h.ScheduledDate ? kendo.toString(kendo.parseDate(h.ScheduledDate),'dd/MM/yyyy') : '—';
+            var daysBadge = h.IsToday
+                ? '<span style="background:#dbeafe;color:#1d40ae;padding:2px 7px;border-radius:10px;font-size:0.7rem;font-weight:700;">TODAY</span>'
+                : h.DaysFromToday <= 7
+                ? '<span style="color:#d97706;font-weight:700;">' + h.DaysFromToday + 'd</span>'
+                : '<span style="color:#64748b;">' + h.DaysFromToday + 'd</span>';
+
+            tbody4.append('<tr style="border-bottom:1px solid #f1f5f9;background:' + rowBg + ';">'
+                + '<td style="padding:8px 14px;text-align:center;font-weight:600;">' + dateStr + '</td>'
+                + '<td style="padding:8px 14px;text-align:center;font-size:0.8rem;">' + (h.HearingTime||'—') + '</td>'
+                + '<td style="padding:8px 14px;"><a href="@Url.Action("EditCase","Case")?id=' + h.CaseFileId
+                + '" style="font-family:monospace;font-weight:700;font-size:0.82rem;color:#1d6fa4;">'
+                + $('<div>').text(h.FileNumber||'').html() + '</a></td>'
+                + '<td style="padding:8px 14px;font-size:0.8rem;">' + $('<div>').text(h.ClaimantName||'').html() + '</td>'
+                + '<td style="padding:8px 14px;font-size:0.8rem;">' + $('<div>').text(h.CaseworkerName||'').html() + '</td>'
+                + '<td style="padding:8px 14px;"><span style="background:#e0e7ff;color:#3730a3;padding:2px 7px;border-radius:20px;font-size:0.7rem;font-weight:700;">' + $('<div>').text(h.StageCode||'').html() + '</span></td>'
+                + '<td style="padding:8px 14px;font-size:0.8rem;">' + $('<div>').text(h.VenueName||'—').html() + '</td>'
+                + '<td style="padding:8px 14px;text-align:center;font-size:0.8rem;">' + (h.CourtroomNumber||'—') + '</td>'
+                + '<td style="padding:8px 14px;font-size:0.8rem;">' + $('<div>').text(h.PresidingJudge||'—').html() + '</td>'
+                + '<td style="padding:8px 14px;text-align:center;">' + daysBadge + '</td>'
+                + '</tr>');
+        });
+
+        $('#reportResults').show();
+        $('#btnExcel').prop('disabled', false);
+    }).fail(function(){ $('#reportLoading').hide(); KSwal.error('Error','Server error.'); });
+}
+
+function exportExcel() {
+    var p = getParams();
+    var form = $('<form method="POST" action="@Url.Action("HearingScheduleExcel","LitigationReport")">');
+    $.each(p, function(k,v){ form.append($('<input type="hidden">').attr('name',k).val(v)); });
+    $('body').append(form); form.submit(); form.remove();
+    KSwal.toast('info','Preparing Excel file...');
+}
+</script>
+}

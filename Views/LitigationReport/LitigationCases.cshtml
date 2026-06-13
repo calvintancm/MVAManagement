@@ -1,0 +1,258 @@
+@{
+    ViewData["Title"] = "Litigation Cases Report";
+    ViewData["BreadcrumbSection"] = "Reports";
+    ViewData["BreadcrumbPage"] = "Litigation Cases";
+
+    var caseworkers   = ViewBag.Caseworkers   as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var hearingStages = ViewBag.HearingStages as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Litigation Cases Report</h1>
+        <p class="page-subtitle">All active cases in formal court litigation — summons dates, stages, and hearing urgency</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-ptc-primary" onclick="runReport()">
+            <i class="bi bi-play-fill"></i> Run Report
+        </button>
+        <button class="btn-ptc-outline" id="btnExcel" onclick="exportExcel()" disabled>
+            <i class="bi bi-file-earmark-excel"></i> Export Excel
+        </button>
+    </div>
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title"><i class="bi bi-funnel"></i> Report Filters</h2>
+    </div>
+    <div class="ptc-card-body" style="padding:20px 24px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:18px;">
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:175px;">
+                <label class="filter-label">Caseworker</label>
+                <select id="ddlCaseworker" style="width:175px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:185px;">
+                <label class="filter-label">Hearing Stage</label>
+                <select id="ddlStage" style="width:185px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:150px;">
+                <label class="filter-label">Summons Drafted From</label>
+                <input type="text" id="dtSummonsFrom" class="k-textbox" style="width:150px;" placeholder="dd/MM/yyyy" />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:150px;">
+                <label class="filter-label">Summons Drafted To</label>
+                <input type="text" id="dtSummonsTo" class="k-textbox" style="width:150px;" placeholder="dd/MM/yyyy" />
+            </div>
+            <div style="padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="runReport()">
+                    <i class="bi bi-play-fill"></i> Generate
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* KPI strip *@
+<div id="kpiStrip" style="display:none;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;">
+    @foreach (var k in new[] {
+        new { Id="kpiTotal",   Label="In Litigation",     Icon="bi-bank2",           Color="#7c3aed", Bg="#faf5ff" },
+        new { Id="kpiClaimed", Label="Total Claimed",     Icon="bi-currency-exchange",Color="#1d6fa4",Bg="#eff6ff" },
+        new { Id="kpiUrgent",  Label="Hearings ≤ 7 Days", Icon="bi-alarm",           Color="#dc2626", Bg="#fef2f2" },
+        new { Id="kpiNoSum",   Label="No Summons Drafted",Icon="bi-file-earmark-x",  Color="#d97706", Bg="#fffbeb" },
+    })
+    {
+        <div class="ptc-card" style="padding:14px 18px;display:flex;align-items:center;gap:12px;border-left:4px solid @k.Color;">
+            <div style="width:38px;height:38px;border-radius:10px;background:@k.Bg;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="bi @k.Icon" style="font-size:18px;color:@k.Color;"></i>
+            </div>
+            <div>
+                <div id="@k.Id" style="font-size:1.4rem;font-weight:700;line-height:1;color:#0f172a;">—</div>
+                <div style="font-size:0.72rem;color:#64748b;margin-top:3px;">@k.Label</div>
+            </div>
+        </div>
+    }
+</div>
+
+<div id="reportResults" style="display:none;">
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;">
+        @* By Stage *@
+        <div class="ptc-card">
+            <div class="ptc-card-header">
+                <h2 class="ptc-card-title"><i class="bi bi-tags"></i> By Hearing Stage</h2>
+            </div>
+            <div class="ptc-card-body" style="padding:0;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                    <thead>
+                        <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Stage</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Cases</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:right;">Claimed (MYR)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyStage"></tbody>
+                </table>
+            </div>
+        </div>
+        @* By Caseworker *@
+        <div class="ptc-card">
+            <div class="ptc-card-header">
+                <h2 class="ptc-card-title"><i class="bi bi-people"></i> By Caseworker</h2>
+            </div>
+            <div class="ptc-card-body" style="padding:0;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                    <thead>
+                        <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Caseworker</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Cases</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Hearings / Week</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:right;">Claimed (MYR)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyCaseworker"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    @* Case detail *@
+    <div class="ptc-card">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-bank2"></i> Litigation Case Detail</h2>
+            <span id="recordCount" class="record-count-badge">0 records</span>
+        </div>
+        <div class="ptc-card-body" style="padding:0;max-height:520px;overflow-y:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                <thead style="position:sticky;top:0;z-index:1;">
+                    <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">File No.</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Court Case No.</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Claimant</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Caseworker</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Stage</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Summons Drafted</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Summons Sealed</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Next Hearing</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Litigation Days</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:right;">Claimed (MYR)</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyDetail"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="reportLoading" style="display:none;text-align:center;padding:48px;">
+    <div class="spinner-border text-primary" role="status" style="width:2.5rem;height:2.5rem;"></div>
+    <div style="margin-top:12px;color:#64748b;font-size:0.88rem;">Generating report...</div>
+</div>
+
+@section Scripts {
+<script>
+var caseworkers   = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(caseworkers.Select(c => new { Id = (int)c.Id, FullName = (string)c.FullName })));
+var hearingStages = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(hearingStages.Select(s => new { Id = (int)s.Id, Label = (string)s.StageCode + " — " + (string)s.StageDescription })));
+
+$(function () {
+    kendo.culture('en-GB');
+    $('#dtSummonsFrom,#dtSummonsTo').kendoDatePicker({ format:'dd/MM/yyyy', culture:'en-GB' });
+    $('#ddlCaseworker').kendoDropDownList({ dataTextField:'FullName', dataValueField:'Id', optionLabel:'All Caseworkers', dataSource: caseworkers   || [] });
+    $('#ddlStage').kendoDropDownList({      dataTextField:'Label',    dataValueField:'Id', optionLabel:'All Stages',      dataSource: hearingStages || [] });
+    runReport();
+});
+
+function getParams() {
+    var dpFrom = $('#dtSummonsFrom').data('kendoDatePicker');
+    var dpTo   = $('#dtSummonsTo').data('kendoDatePicker');
+    return {
+        caseworkerId:      $('#ddlCaseworker').data('kendoDropDownList') ? $('#ddlCaseworker').data('kendoDropDownList').value() : '',
+        hearingStageId:    $('#ddlStage').data('kendoDropDownList') ? $('#ddlStage').data('kendoDropDownList').value() : '',
+        summonsDraftedFrom:dpFrom && dpFrom.value() ? dpFrom.value().toISOString() : '',
+        summonsDraftedTo:  dpTo   && dpTo.value()   ? dpTo.value().toISOString()   : '',
+        __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+    };
+}
+
+function runReport() {
+    $('#reportResults,#kpiStrip').hide();
+    $('#reportLoading').show();
+
+    $.post('@Url.Action("LitigationCasesData","LitigationReport")', getParams(), function (r) {
+        $('#reportLoading').hide();
+        if (!r || r.success === false) { KSwal.error('Error', r.message || 'Failed.'); return; }
+
+        $('#kpiTotal').text(r.total || 0);
+        $('#kpiClaimed').text('RM ' + kendo.toString(r.totalClaimed || 0, 'n2'));
+        $('#kpiUrgent').text(r.urgentHearings || 0);
+        $('#kpiNoSum').text(r.noSummons || 0);
+        $('#kpiStrip').css('display','grid');
+        $('#recordCount').text((r.total||0) + ' records');
+
+        // By stage
+        var tbody = $('#tbodyStage').empty();
+        (r.byStage || []).forEach(function(s, i) {
+            tbody.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + '">'
+                + '<td style="padding:9px 14px;font-size:0.8rem;">' + $('<div>').text(s.Stage).html() + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;font-weight:700;">' + s.Count + '</td>'
+                + '<td style="padding:9px 14px;text-align:right;font-variant-numeric:tabular-nums;">RM ' + kendo.toString(s.TotalClaimed,'n2') + '</td></tr>');
+        });
+
+        // By caseworker
+        var tbody2 = $('#tbodyCaseworker').empty();
+        (r.byCaseworker || []).forEach(function(c, i) {
+            tbody2.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + '">'
+                + '<td style="padding:9px 14px;font-weight:600;">' + $('<div>').text(c.Caseworker).html() + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;font-weight:700;">' + c.Count + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;color:#d97706;font-weight:600;">' + c.HearingsDue + '</td>'
+                + '<td style="padding:9px 14px;text-align:right;font-variant-numeric:tabular-nums;">RM ' + kendo.toString(c.TotalClaimed,'n2') + '</td></tr>');
+        });
+
+        // Case detail
+        var tbody3 = $('#tbodyDetail').empty();
+        (r.rows || []).forEach(function(c, i) {
+            var rowBg = c.IsHearingUrgent ? '#fef9c3'
+                      : (c.DaysInLitigation && c.DaysInLitigation > 365 ? '#fef2f2' : (i%2===0?'':'#f8fafc'));
+            var nextHearingStr = c.NextHearingDate
+                ? kendo.toString(kendo.parseDate(c.NextHearingDate),'dd/MM/yyyy')
+                  + (c.IsHearingUrgent ? ' <span style="background:#fef3c7;color:#92400e;font-size:0.68rem;padding:1px 5px;border-radius:8px;font-weight:700;">'+ c.NextHearingDays +'d</span>' : '')
+                : '<span style="color:#94a3b8;">—</span>';
+            var litDaysStr = c.DaysInLitigation
+                ? '<span style="' + (c.DaysInLitigation > 365 ? 'color:#dc2626;font-weight:700;' : '') + '">' + c.DaysInLitigation + 'd</span>'
+                : '<span style="color:#94a3b8;">—</span>';
+            var draftDate  = c.SummonsDraftedDate ? kendo.toString(kendo.parseDate(c.SummonsDraftedDate),'dd/MM/yyyy') : '<span style="color:#d97706;">Not drafted</span>';
+            var sealDate   = c.SummonsSealedDate  ? kendo.toString(kendo.parseDate(c.SummonsSealedDate),'dd/MM/yyyy')  : '<span style="color:#94a3b8;">—</span>';
+
+            tbody3.append('<tr style="border-bottom:1px solid #f1f5f9;background:' + rowBg + ';">'
+                + '<td style="padding:8px 14px;"><a href="@Url.Action("EditCase","Case")?id=' + c.Id
+                + '" style="font-family:monospace;font-weight:700;font-size:0.82rem;color:#1d6fa4;">'
+                + $('<div>').text(c.FileNumber||'').html() + '</a></td>'
+                + '<td style="padding:8px 14px;font-family:monospace;font-size:0.8rem;color:#64748b;">' + $('<div>').text(c.CourtCaseNumber||'—').html() + '</td>'
+                + '<td style="padding:8px 14px;font-size:0.8rem;">' + $('<div>').text(c.PrimaryClaimantName||'').html() + '</td>'
+                + '<td style="padding:8px 14px;font-size:0.8rem;">' + $('<div>').text(c.CaseworkerName||'').html() + '</td>'
+                + '<td style="padding:8px 14px;"><span style="background:#e0e7ff;color:#3730a3;padding:2px 7px;border-radius:20px;font-size:0.7rem;font-weight:700;">' + $('<div>').text(c.HearingStage||'—').html() + '</span></td>'
+                + '<td style="padding:8px 14px;text-align:center;font-size:0.8rem;">' + draftDate + '</td>'
+                + '<td style="padding:8px 14px;text-align:center;font-size:0.8rem;">' + sealDate + '</td>'
+                + '<td style="padding:8px 14px;text-align:center;font-size:0.8rem;">' + nextHearingStr + '</td>'
+                + '<td style="padding:8px 14px;text-align:center;">' + litDaysStr + '</td>'
+                + '<td style="padding:8px 14px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;">RM ' + kendo.toString(c.ClaimedAmount,'n2') + '</td>'
+                + '</tr>');
+        });
+
+        $('#reportResults').show();
+        $('#btnExcel').prop('disabled', false);
+    }).fail(function(){ $('#reportLoading').hide(); KSwal.error('Error','Server error.'); });
+}
+
+function exportExcel() {
+    var p = getParams();
+    var form = $('<form method="POST" action="@Url.Action("LitigationCasesExcel","LitigationReport")">');
+    $.each(p, function(k,v){ form.append($('<input type="hidden">').attr('name',k).val(v)); });
+    $('body').append(form); form.submit(); form.remove();
+    KSwal.toast('info','Preparing Excel file...');
+}
+</script>
+}

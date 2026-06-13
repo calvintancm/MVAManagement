@@ -200,7 +200,7 @@ function runReport() {
     $('#reportResults,#kpiStrip').hide();
     $('#reportLoading').show();
 
-    $.post('@Url.Action("NewCasesByPeriodData","Report")', getParams(), function (r) {
+        $.post('@Url.Action("NewCasesByPeriodData", "CaseReport")', getParams(), function (r) {
         $('#reportLoading').hide();
         if (!r || r.success === false) { KSwal.error('Error', r.message || 'Failed.'); return; }
 
@@ -249,7 +249,7 @@ function runReport() {
             var accDate   = c.AccidentDate ? kendo.toString(kendo.parseDate(c.AccidentDate),'dd/MM/yyyy') : '—';
             var openedDate = c.OpenedDate  ? kendo.toString(kendo.parseDate(c.OpenedDate),'dd/MM/yyyy')  : '—';
             tbody3.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + '">'
-                + '<td style="padding:8px 14px;"><a href="@Url.Action("EditCase","Case")?id=' + c.Id
+                + '<td style="padding:8px 14px;"><a href="@Url.Action("EditCase","CaseReport")?id=' + c.Id
                 + '" style="font-family:monospace;font-weight:700;font-size:0.82rem;color:#1d6fa4;">'
                 + $('<div>').text(c.FileNumber||'').html() + '</a></td>'
                 + '<td style="padding:8px 14px;">' + $('<div>').text(c.PrimaryClaimantName||'').html() + '</td>'
@@ -269,7 +269,7 @@ function runReport() {
 
 function exportExcel() {
     var p = getParams();
-    var form = $('<form method="POST" action="@Url.Action("NewCasesByPeriodExcel","Report")">');
+    var form = $('<form method="POST" action="@Url.Action("NewCasesByPeriodExcel","CaseReport")">');
     $.each(p, function(k,v){ form.append($('<input type="hidden">').attr('name',k).val(v)); });
     $('body').append(form); form.submit(); form.remove();
     KSwal.toast('info','Preparing Excel file...');

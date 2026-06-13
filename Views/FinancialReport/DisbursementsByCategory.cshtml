@@ -1,0 +1,273 @@
+@{
+    ViewData["Title"] = "Disbursements by Category";
+    ViewData["BreadcrumbSection"] = "Reports";
+    ViewData["BreadcrumbPage"] = "Disbursements by Category";
+
+    var categories  = ViewBag.Categories  as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var caseworkers = ViewBag.Caseworkers as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Disbursements by Category</h1>
+        <p class="page-subtitle">Total expense spend per category — recovered vs unrecovered breakdown</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-ptc-primary" onclick="runReport()">
+            <i class="bi bi-play-fill"></i> Run Report
+        </button>
+        <button class="btn-ptc-outline" id="btnExcel" onclick="exportExcel()" disabled>
+            <i class="bi bi-file-earmark-excel"></i> Export Excel
+        </button>
+    </div>
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title"><i class="bi bi-funnel"></i> Report Filters</h2>
+    </div>
+    <div class="ptc-card-body" style="padding:20px 24px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:18px;">
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:150px;">
+                <label class="filter-label">Date From</label>
+                <input type="text" id="dtFrom" class="k-textbox" style="width:150px;" placeholder="dd/MM/yyyy" />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:150px;">
+                <label class="filter-label">Date To</label>
+                <input type="text" id="dtTo" class="k-textbox" style="width:150px;" placeholder="dd/MM/yyyy" />
+            </div>
+            <div style="padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="runReport()">
+                    <i class="bi bi-play-fill"></i> Generate
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* KPI strip *@
+<div id="kpiStrip" style="display:none;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;">
+    @foreach (var k in new[] {
+        new { Id="kpiTotal",     Label="Total Records",      Icon="bi-receipt",        Color="#7c3aed", Bg="#faf5ff" },
+        new { Id="kpiGrand",     Label="Grand Total (MYR)",  Icon="bi-cash-stack",     Color="#1d6fa4", Bg="#eff6ff" },
+        new { Id="kpiRecovered", Label="Recovered (MYR)",    Icon="bi-check-circle",   Color="#16a34a", Bg="#f0fdf4" },
+        new { Id="kpiUnrec",     Label="Unrecovered (MYR)",  Icon="bi-arrow-repeat",   Color="#dc2626", Bg="#fef2f2" },
+    })
+    {
+        <div class="ptc-card" style="padding:14px 18px;display:flex;align-items:center;gap:12px;border-left:4px solid @k.Color;">
+            <div style="width:38px;height:38px;border-radius:10px;background:@k.Bg;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="bi @k.Icon" style="font-size:18px;color:@k.Color;"></i>
+            </div>
+            <div>
+                <div id="@k.Id" style="font-size:1.15rem;font-weight:700;line-height:1;color:#0f172a;">—</div>
+                <div style="font-size:0.72rem;color:#64748b;margin-top:3px;">@k.Label</div>
+            </div>
+        </div>
+    }
+</div>
+
+<div id="reportResults" style="display:none;">
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;">
+
+        @* Category breakdown *@
+        <div class="ptc-card">
+            <div class="ptc-card-header">
+                <h2 class="ptc-card-title"><i class="bi bi-list-check"></i> By Category</h2>
+            </div>
+            <div class="ptc-card-body" style="padding:0;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                    <thead>
+                        <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:left;">Category</th>
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:center;">Count</th>
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:right;">Total (MYR)</th>
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:right;">Unrec. (MYR)</th>
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:left;">Share</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyCategory"></tbody>
+                </table>
+            </div>
+        </div>
+
+        @* Monthly trend *@
+        <div class="ptc-card">
+            <div class="ptc-card-header">
+                <h2 class="ptc-card-title"><i class="bi bi-graph-up"></i> Monthly Trend</h2>
+            </div>
+            <div class="ptc-card-body" style="padding:0;max-height:350px;overflow-y:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                    <thead style="position:sticky;top:0;">
+                        <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:left;">Period</th>
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:center;">Count</th>
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:right;">Total (MYR)</th>
+                            <th style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:left;">Bar</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyMonthly"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    @* Transaction detail *@
+    <div class="ptc-card">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-receipt-cutoff"></i> Transaction Detail</h2>
+            <span id="recordCount" class="record-count-badge">0 records</span>
+        </div>
+        <div class="ptc-card-body" style="padding:0;max-height:420px;overflow-y:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                <thead style="position:sticky;top:0;z-index:1;">
+                    <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">File No.</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Claimant</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Date</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Category</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Description</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:right;">Amount (MYR)</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Recovered</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyDetail"></tbody>
+                <tfoot>
+                    <tr id="tfootTotal" style="background:#f3e8ff;font-weight:700;display:none;">
+                        <td colspan="5" style="padding:9px 14px;text-align:right;">Page Total:</td>
+                        <td id="tfootAmount" style="padding:9px 14px;text-align:right;font-variant-numeric:tabular-nums;"></td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="reportLoading" style="display:none;text-align:center;padding:48px;">
+    <div class="spinner-border text-primary" role="status" style="width:2.5rem;height:2.5rem;"></div>
+    <div style="margin-top:12px;color:#64748b;font-size:0.88rem;">Generating report...</div>
+</div>
+
+@section Scripts {
+<script>
+var allCategories = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+    categories.Select(c => new { CategoryName = (string)c.CategoryName, HexColor = (string)c.HexColor })));
+
+var colorMap = {};
+(allCategories || []).forEach(function(c){ colorMap[c.CategoryName] = c.HexColor || '#94A3B8'; });
+
+$(function () {
+    kendo.culture('en-GB');
+    $('#dtFrom,#dtTo').kendoDatePicker({ format:'dd/MM/yyyy', culture:'en-GB' });
+    var now = new Date();
+    $('#dtFrom').data('kendoDatePicker').value(new Date(now.getFullYear(), 0, 1));
+    $('#dtTo').data('kendoDatePicker').value(now);
+    runReport();
+});
+
+function getParams() {
+    var dpFrom = $('#dtFrom').data('kendoDatePicker');
+    var dpTo   = $('#dtTo').data('kendoDatePicker');
+    return {
+        dateFrom: dpFrom && dpFrom.value() ? dpFrom.value().toISOString() : '',
+        dateTo:   dpTo   && dpTo.value()   ? dpTo.value().toISOString()   : '',
+        __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+    };
+}
+
+function runReport() {
+    $('#reportResults,#kpiStrip').hide();
+    $('#reportLoading').show();
+
+    $.post('@Url.Action("DisbursementsByCategoryData","FinancialReport")', getParams(), function (r) {
+        $('#reportLoading').hide();
+        if (!r || r.success === false) { KSwal.error('Error', r.message || 'Failed.'); return; }
+
+        $('#kpiTotal').text(r.total || 0);
+        $('#kpiGrand').text('RM ' + kendo.toString(r.grandTotal || 0, 'n2'));
+        $('#kpiRecovered').text('RM ' + kendo.toString(r.totalRecovered || 0, 'n2'));
+        $('#kpiUnrec').text('RM ' + kendo.toString(r.totalUnrecovered || 0, 'n2'));
+        $('#kpiStrip').css('display','grid');
+        $('#recordCount').text((r.total||0) + ' records');
+
+        // Category breakdown
+        var tbody = $('#tbodyCategory').empty();
+        var maxAmt = Math.max.apply(null, (r.byCategory||[]).map(function(c){ return c.TotalAmount; })) || 1;
+        (r.byCategory || []).forEach(function(c, i) {
+            var color  = colorMap[c.Category] || '#94A3B8';
+            var barPct = Math.round((c.TotalAmount / maxAmt) * 100);
+            tbody.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + '">'
+                + '<td style="padding:9px 16px;"><span style="display:inline-flex;align-items:center;gap:6px;">'
+                + '<span style="width:9px;height:9px;border-radius:50%;background:' + color + ';flex-shrink:0;"></span>'
+                + '<span style="font-weight:600;">' + $('<div>').text(c.Category).html() + '</span></span></td>'
+                + '<td style="padding:9px 16px;text-align:center;">' + c.Count + '</td>'
+                + '<td style="padding:9px 16px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">RM ' + kendo.toString(c.TotalAmount,'n2') + '</td>'
+                + '<td style="padding:9px 16px;text-align:right;font-variant-numeric:tabular-nums;color:#dc2626;">RM ' + kendo.toString(c.Unrecovered,'n2') + '</td>'
+                + '<td style="padding:9px 16px;">'
+                + '<div style="display:flex;align-items:center;gap:5px;">'
+                + '<div style="height:6px;width:80px;background:#e2e8f0;border-radius:3px;">'
+                + '<div style="height:100%;width:' + barPct + '%;background:' + color + ';border-radius:3px;"></div></div>'
+                + '<span style="font-size:0.72rem;color:#64748b;">' + c.Pct + '%</span></div></td>'
+                + '</tr>');
+        });
+
+        // Monthly trend
+        var tbody2 = $('#tbodyMonthly').empty();
+        var maxMonth = Math.max.apply(null, (r.byMonth||[]).map(function(m){ return m.Total; })) || 1;
+        (r.byMonth || []).forEach(function(m, i) {
+            var barPct = Math.round((m.Total / maxMonth) * 100);
+            tbody2.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + '">'
+                + '<td style="padding:9px 16px;font-weight:600;">' + $('<div>').text(m.Period).html() + '</td>'
+                + '<td style="padding:9px 16px;text-align:center;">' + m.Count + '</td>'
+                + '<td style="padding:9px 16px;text-align:right;font-variant-numeric:tabular-nums;">RM ' + kendo.toString(m.Total,'n2') + '</td>'
+                + '<td style="padding:9px 16px;"><div style="height:6px;background:#e2e8f0;border-radius:3px;min-width:60px;">'
+                + '<div style="height:100%;width:' + barPct + '%;background:#7c3aed;border-radius:3px;"></div></div></td>'
+                + '</tr>');
+        });
+
+        // Detail rows
+        var tbody3 = $('#tbodyDetail').empty();
+        var pageTotal = 0;
+        (r.rows || []).forEach(function(d, i) {
+            pageTotal += d.Amount || 0;
+            var color  = colorMap[d.DisbursementCategory] || '#94A3B8';
+            var disbDate = d.DisbursementDate ? kendo.toString(kendo.parseDate(d.DisbursementDate),'dd/MM/yyyy') : '—';
+            var desc = d.Description && d.Description.length > 50 ? d.Description.substring(0,50)+'…' : (d.Description||'—');
+            tbody3.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + '">'
+                + '<td style="padding:8px 14px;"><a href="@Url.Action("EditCase","Case")?id=' + d.Id
+                + '" style="font-family:monospace;font-weight:700;font-size:0.82rem;color:#1d6fa4;">'
+                + $('<div>').text(d.FileNumber||'').html() + '</a></td>'
+                + '<td style="padding:8px 14px;font-size:0.8rem;">' + $('<div>').text(d.ClaimantName||'').html() + '</td>'
+                + '<td style="padding:8px 14px;text-align:center;">' + disbDate + '</td>'
+                + '<td style="padding:8px 14px;"><span style="display:inline-flex;align-items:center;gap:5px;">'
+                + '<span style="width:8px;height:8px;border-radius:50%;background:' + color + ';flex-shrink:0;"></span>'
+                + '<span style="font-size:0.78rem;">' + $('<div>').text(d.DisbursementCategory||'').html() + '</span></span></td>'
+                + '<td style="padding:8px 14px;font-size:0.8rem;" title="' + $('<div>').text(d.Description||'').html() + '">' + $('<div>').text(desc).html() + '</td>'
+                + '<td style="padding:8px 14px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;">RM ' + kendo.toString(d.Amount,'n2') + '</td>'
+                + '<td style="padding:8px 14px;text-align:center;">'
+                + (d.IsRecovered
+                    ? '<i class="bi bi-check-circle-fill" style="color:#16a34a;"></i>'
+                    : '<i class="bi bi-x-circle" style="color:#dc2626;"></i>')
+                + '</td></tr>');
+        });
+        $('#tfootAmount').text('RM ' + kendo.toString(pageTotal,'n2'));
+        $('#tfootTotal').show();
+
+        $('#reportResults').show();
+        $('#btnExcel').prop('disabled', false);
+    }).fail(function(){ $('#reportLoading').hide(); KSwal.error('Error','Server error.'); });
+}
+
+function exportExcel() {
+    var p = getParams();
+    var form = $('<form method="POST" action="@Url.Action("DisbursementsByCategoryExcel","FinancialReport")">');
+    $.each(p, function(k,v){ form.append($('<input type="hidden">').attr('name',k).val(v)); });
+    $('body').append(form); form.submit(); form.remove();
+    KSwal.toast('info','Preparing Excel file...');
+}
+</script>
+}

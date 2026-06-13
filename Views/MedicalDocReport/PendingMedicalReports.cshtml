@@ -1,0 +1,295 @@
+@{
+    ViewData["Title"] = "Pending Medical Reports";
+    ViewData["BreadcrumbSection"] = "Reports";
+    ViewData["BreadcrumbPage"] = "Pending Medical Reports";
+
+    var caseworkers = ViewBag.Caseworkers as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Pending Medical Reports</h1>
+        <p class="page-subtitle">Injuries where a specialist or hospital report has not yet been received</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-ptc-primary" onclick="runReport()">
+            <i class="bi bi-play-fill"></i> Run Report
+        </button>
+        <button class="btn-ptc-outline" id="btnExcel" onclick="exportExcel()" disabled>
+            <i class="bi bi-file-earmark-excel"></i> Export Excel
+        </button>
+    </div>
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title"><i class="bi bi-funnel"></i> Report Filters</h2>
+    </div>
+    <div class="ptc-card-body" style="padding:20px 24px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:18px;">
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:175px;">
+                <label class="filter-label">Caseworker</label>
+                <select id="ddlCaseworker" style="width:175px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:165px;">
+                <label class="filter-label">Severity</label>
+                <select id="ddlSeverity" style="width:165px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:165px;">
+                <label class="filter-label">Report Status</label>
+                <select id="ddlReportStatus" style="width:165px;"></select>
+            </div>
+            <div style="padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="runReport()">
+                    <i class="bi bi-play-fill"></i> Generate
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* KPI strip *@
+<div id="kpiStrip" style="display:none;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px;">
+    @foreach (var k in new[] {
+        new { Id="kpiTotal",    Label="Total Pending",       Icon="bi-hourglass-split",     Color="#d97706", Bg="#fffbeb" },
+        new { Id="kpiPending",  Label="Status: Pending",     Icon="bi-clock",               Color="#dc2626", Bg="#fef2f2" },
+        new { Id="kpiReq",      Label="Status: Requested",   Icon="bi-send",                Color="#1d6fa4", Bg="#eff6ff" },
+        new { Id="kpiSevere",   Label="Severe / Critical",   Icon="bi-exclamation-triangle", Color="#7c3aed",Bg="#faf5ff" },
+        new { Id="kpiPerm",     Label="Permanent Disability",Icon="bi-person-wheelchair",   Color="#64748b", Bg="#f8fafc" },
+    })
+    {
+        <div class="ptc-card" style="padding:14px 18px;display:flex;align-items:center;gap:12px;border-left:4px solid @k.Color;">
+            <div style="width:38px;height:38px;border-radius:10px;background:@k.Bg;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="bi @k.Icon" style="font-size:18px;color:@k.Color;"></i>
+            </div>
+            <div>
+                <div id="@k.Id" style="font-size:1.35rem;font-weight:700;line-height:1;color:#0f172a;">—</div>
+                <div style="font-size:0.72rem;color:#64748b;margin-top:3px;">@k.Label</div>
+            </div>
+        </div>
+    }
+</div>
+
+<div id="reportResults" style="display:none;">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-bottom:18px;">
+
+        @* By Severity *@
+        <div class="ptc-card">
+            <div class="ptc-card-header">
+                <h2 class="ptc-card-title"><i class="bi bi-activity"></i> By Severity</h2>
+            </div>
+            <div class="ptc-card-body" style="padding:0;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.83rem;">
+                    <thead>
+                        <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                            <th style="padding:9px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Severity</th>
+                            <th style="padding:9px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Count</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodySeverity"></tbody>
+                </table>
+            </div>
+        </div>
+
+        @* By Caseworker *@
+        <div class="ptc-card">
+            <div class="ptc-card-header">
+                <h2 class="ptc-card-title"><i class="bi bi-people"></i> By Caseworker</h2>
+            </div>
+            <div class="ptc-card-body" style="padding:0;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.83rem;">
+                    <thead>
+                        <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                            <th style="padding:9px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Caseworker</th>
+                            <th style="padding:9px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Total</th>
+                            <th style="padding:9px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Severe</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyCaseworker"></tbody>
+                </table>
+            </div>
+        </div>
+
+        @* Top Doctors *@
+        <div class="ptc-card">
+            <div class="ptc-card-header">
+                <h2 class="ptc-card-title"><i class="bi bi-person-badge"></i> Top Doctors Awaited</h2>
+            </div>
+            <div class="ptc-card-body" style="padding:0;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.83rem;">
+                    <thead>
+                        <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                            <th style="padding:9px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Doctor</th>
+                            <th style="padding:9px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Reports</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyDoctor"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    @* Detail table *@
+    <div class="ptc-card">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-file-earmark-medical"></i> Pending Report Detail</h2>
+            <span id="recordCount" class="record-count-badge">0 records</span>
+        </div>
+        <div class="ptc-card-body" style="padding:0;max-height:500px;overflow-y:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                <thead style="position:sticky;top:0;z-index:1;">
+                    <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">File No.</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Claimant</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Caseworker</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Injury</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Severity</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Doctor / Hospital</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Report Status</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyDetail"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="reportLoading" style="display:none;text-align:center;padding:48px;">
+    <div class="spinner-border text-primary" role="status" style="width:2.5rem;height:2.5rem;"></div>
+    <div style="margin-top:12px;color:#64748b;font-size:0.88rem;">Generating report...</div>
+</div>
+
+@section Scripts {
+<script>
+var caseworkers = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+    caseworkers.Select(c => new { Id = (int)c.Id, FullName = (string)c.FullName })));
+
+var severityLevels = ['Minor','Moderate','Severe','Permanent Disability','Fatal'];
+var severityColorMap = {
+    'Minor':                { bg:'#dcfce7', color:'#166534' },
+    'Moderate':             { bg:'#fef9c3', color:'#854d0e' },
+    'Severe':               { bg:'#fee2e2', color:'#991b1b' },
+    'Permanent Disability': { bg:'#fce7f3', color:'#9d174d' },
+    'Fatal':                { bg:'#1e293b', color:'#f1f5f9' }
+};
+var reportColorMap = {
+    'Pending':   { bg:'#fef3c7', color:'#92400e' },
+    'Requested': { bg:'#dbeafe', color:'#1d40ae' }
+};
+
+$(function () {
+    kendo.culture('en-GB');
+    $('#ddlCaseworker').kendoDropDownList({
+        dataTextField:'FullName', dataValueField:'Id', optionLabel:'All Caseworkers',
+        dataSource: caseworkers || []
+    });
+    $('#ddlSeverity').kendoDropDownList({ dataSource: severityLevels, optionLabel:'All Severities' });
+    $('#ddlReportStatus').kendoDropDownList({
+        dataTextField:'text', dataValueField:'value',
+        optionLabel: 'Pending + Requested',
+        dataSource: [{ text:'Pending Only', value:'Pending' }, { text:'Requested Only', value:'Requested' }]
+    });
+    runReport();
+});
+
+function getParams() {
+    return {
+        caseworkerId: $('#ddlCaseworker').data('kendoDropDownList') ? $('#ddlCaseworker').data('kendoDropDownList').value() : '',
+        severity:     $('#ddlSeverity').data('kendoDropDownList') ? $('#ddlSeverity').data('kendoDropDownList').value() : '',
+        reportStatus: $('#ddlReportStatus').data('kendoDropDownList') ? $('#ddlReportStatus').data('kendoDropDownList').value() : '',
+        __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+    };
+}
+
+function runReport() {
+    $('#reportResults,#kpiStrip').hide();
+    $('#reportLoading').show();
+
+    $.post('@Url.Action("PendingMedicalReportsData","MedicalDocReport")', getParams(), function (r) {
+        $('#reportLoading').hide();
+        if (!r || r.success === false) { KSwal.error('Error', r.message || 'Failed.'); return; }
+
+        $('#kpiTotal').text(r.total    || 0);
+        $('#kpiPending').text(r.pending   || 0);
+        $('#kpiReq').text(r.requested  || 0);
+        $('#kpiSevere').text(r.severe    || 0);
+        $('#kpiPerm').text(r.permanent || 0);
+        $('#kpiStrip').css('display','grid');
+        $('#recordCount').text((r.total||0) + ' records');
+
+        // By severity
+        var tbody = $('#tbodySeverity').empty();
+        (r.bySeverity || []).forEach(function(s, i) {
+            var sMap = severityColorMap[s.Severity] || { bg:'#e2e8f0', color:'#475569' };
+            tbody.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + '">'
+                + '<td style="padding:9px 14px;"><span style="background:' + sMap.bg + ';color:' + sMap.color
+                + ';padding:2px 9px;border-radius:20px;font-size:0.71rem;font-weight:700;">' + $('<div>').text(s.Severity).html() + '</span></td>'
+                + '<td style="padding:9px 14px;text-align:center;font-weight:700;">' + s.Count + '</td></tr>');
+        });
+
+        // By caseworker
+        var tbody2 = $('#tbodyCaseworker').empty();
+        (r.byCaseworker || []).forEach(function(c, i) {
+            tbody2.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + '">'
+                + '<td style="padding:9px 14px;font-weight:600;">' + $('<div>').text(c.Caseworker).html() + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;font-weight:700;">' + c.Total + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;color:#dc2626;font-weight:600;">' + c.Severe + '</td></tr>');
+        });
+
+        // Top doctors
+        var tbody3 = $('#tbodyDoctor').empty();
+        (r.byDoctor || []).forEach(function(d, i) {
+            tbody3.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + '">'
+                + '<td style="padding:9px 14px;">'
+                + '<div style="font-weight:600;font-size:0.82rem;">' + $('<div>').text(d.Doctor).html() + '</div>'
+                + (d.Hospital ? '<div style="font-size:0.71rem;color:#64748b;">' + $('<div>').text(d.Hospital).html() + '</div>' : '')
+                + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;font-weight:700;">' + d.Count + '</td></tr>');
+        });
+
+        // Detail rows
+        var tbody4 = $('#tbodyDetail').empty();
+        (r.rows || []).forEach(function(inj, i) {
+            var sMap = severityColorMap[inj.SeverityLevel] || { bg:'#e2e8f0', color:'#475569' };
+            var rMap = reportColorMap[inj.MedicalReportStatus] || { bg:'#e2e8f0', color:'#475569' };
+            var rowBg = inj.SeverityLevel === 'Severe' || inj.SeverityLevel === 'Permanent Disability' ? '#fff5f5' : (i%2===0?'':'#f8fafc');
+            var perm = inj.IsPermanentDisability
+                ? ' <span style="background:#fce7f3;color:#9d174d;font-size:0.65rem;padding:1px 5px;border-radius:8px;font-weight:700;">PERM</span>' : '';
+            var docHtml = inj.DoctorName
+                ? $('<div>').text(inj.DoctorName).html() + (inj.MedicalSpecialty ? ' <span style="font-size:0.7rem;color:#7c3aed;">(' + $('<div>').text(inj.MedicalSpecialty).html() + ')</span>' : '')
+                  + (inj.HospitalName ? '<div style="font-size:0.71rem;color:#64748b;">' + $('<div>').text(inj.HospitalName).html() + '</div>' : '')
+                : '<span style="color:#94a3b8;">—</span>';
+
+            tbody4.append('<tr style="border-bottom:1px solid #f1f5f9;background:' + rowBg + ';">'
+                + '<td style="padding:8px 14px;"><a href="@Url.Action("EditCase","Case")?id=' + inj.CaseFileId
+                + '" style="font-family:monospace;font-weight:700;font-size:0.82rem;color:#1d6fa4;">'
+                + $('<div>').text(inj.FileNumber||'').html() + '</a></td>'
+                + '<td style="padding:8px 14px;font-size:0.8rem;">' + $('<div>').text(inj.ClaimantName||'').html() + '</td>'
+                + '<td style="padding:8px 14px;font-size:0.8rem;">' + $('<div>').text(inj.CaseworkerName||'').html() + '</td>'
+                + '<td style="padding:8px 14px;font-size:0.8rem;font-weight:600;">' + $('<div>').text(inj.InjuryDescription||'').html() + perm
+                + (inj.BodyPart ? '<div style="font-size:0.71rem;color:#64748b;">' + $('<div>').text(inj.BodyPart).html() + '</div>' : '') + '</td>'
+                + '<td style="padding:8px 14px;text-align:center;"><span style="background:' + sMap.bg + ';color:' + sMap.color
+                + ';padding:2px 8px;border-radius:20px;font-size:0.7rem;font-weight:700;">' + $('<div>').text(inj.SeverityLevel||'').html() + '</span></td>'
+                + '<td style="padding:8px 14px;font-size:0.8rem;">' + docHtml + '</td>'
+                + '<td style="padding:8px 14px;text-align:center;"><span style="background:' + rMap.bg + ';color:' + rMap.color
+                + ';padding:2px 8px;border-radius:20px;font-size:0.7rem;font-weight:700;">' + $('<div>').text(inj.MedicalReportStatus||'').html() + '</span></td>'
+                + '</tr>');
+        });
+
+        $('#reportResults').show();
+        $('#btnExcel').prop('disabled', false);
+    }).fail(function(){ $('#reportLoading').hide(); KSwal.error('Error','Server error.'); });
+}
+
+function exportExcel() {
+    var p = getParams();
+    var form = $('<form method="POST" action="@Url.Action("PendingMedicalReportsExcel","MedicalDocReport")">');
+    $.each(p, function(k,v){ form.append($('<input type="hidden">').attr('name',k).val(v)); });
+    $('body').append(form); form.submit(); form.remove();
+    KSwal.toast('info','Preparing Excel file...');
+}
+</script>
+}

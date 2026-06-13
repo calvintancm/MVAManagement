@@ -174,7 +174,7 @@ function runReport() {
     $('#reportResults,#kpiStrip').hide();
     $('#reportLoading').show();
 
-    $.post('@Url.Action("CaseStatusSummaryData","Report")', getParams(), function (r) {
+            $.post('@Url.Action("CaseStatusSummaryData", "CaseReport")', getParams(), function (r) {
         $('#reportLoading').hide();
         if (!r || r.success === false) { KSwal.error('Error', r.message || 'Failed.'); return; }
 
@@ -219,7 +219,7 @@ function runReport() {
 
 function exportExcel() {
     var params = getParams();
-    var form = $('<form method="POST" action="@Url.Action("CaseStatusSummaryExcel","Report")">');
+            var form = $('<form method="POST" action="@Url.Action("CaseStatusSummaryExcel", "CaseReport")">');
     $.each(params, function(k,v){ form.append($('<input type="hidden">').attr('name',k).val(v)); });
     $('body').append(form); form.submit(); form.remove();
     KSwal.toast('info','Preparing Excel file...');

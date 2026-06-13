@@ -1,0 +1,233 @@
+@{
+    ViewData["Title"] = "Outstanding Offer Register";
+    ViewData["BreadcrumbSection"] = "Reports";
+    ViewData["BreadcrumbPage"] = "Outstanding Offer Register";
+
+    var caseworkers = ViewBag.Caseworkers as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Outstanding Offer Register</h1>
+        <p class="page-subtitle">Open and countered settlement offers — negotiation pipeline with expiry tracking</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-ptc-primary" onclick="runReport()">
+            <i class="bi bi-play-fill"></i> Run Report
+        </button>
+        <button class="btn-ptc-outline" id="btnExcel" onclick="exportExcel()" disabled>
+            <i class="bi bi-file-earmark-excel"></i> Export Excel
+        </button>
+    </div>
+</div>
+
+@* Expiry legend *@
+<div class="ptc-card mb-3" style="border-left:4px solid #d97706;">
+    <div class="ptc-card-body" style="padding:12px 20px;">
+        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;font-size:0.8rem;">
+            <span><i class="bi bi-info-circle-fill" style="color:#1d6fa4;"></i> Row colours indicate offer expiry urgency:</span>
+            <span style="background:#fef2f2;border:1px solid #fca5a5;padding:2px 10px;border-radius:6px;font-size:0.78rem;">Expired / Overdue</span>
+            <span style="background:#fffbeb;border:1px solid #fcd34d;padding:2px 10px;border-radius:6px;font-size:0.78rem;">Expiring ≤ 14 days</span>
+            <span style="background:#f0fdf4;border:1px solid #86efac;padding:2px 10px;border-radius:6px;font-size:0.78rem;">Active — no expiry concern</span>
+        </div>
+    </div>
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title"><i class="bi bi-funnel"></i> Report Filters</h2>
+    </div>
+    <div class="ptc-card-body" style="padding:20px 24px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:18px;">
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:175px;">
+                <label class="filter-label">Caseworker</label>
+                <select id="ddlCaseworker" style="width:175px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:160px;">
+                <label class="filter-label">Offer Status</label>
+                <select id="ddlOfferStatus" style="width:160px;"></select>
+            </div>
+            <div style="padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="runReport()">
+                    <i class="bi bi-play-fill"></i> Generate
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* KPI strip *@
+<div id="kpiStrip" style="display:none;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px;">
+    @foreach (var k in new[] {
+        new { Id="kpiTotal",    Label="Total Open/Countered",  Icon="bi-chat-square-text",  Color="#1d6fa4", Bg="#eff6ff" },
+        new { Id="kpiOpen",     Label="Open",                  Icon="bi-hourglass-split",   Color="#d97706", Bg="#fffbeb" },
+        new { Id="kpiCountered",Label="Countered",             Icon="bi-arrow-left-right",  Color="#7c3aed", Bg="#faf5ff" },
+        new { Id="kpiExpiring", Label="Expiring ≤ 14 Days",    Icon="bi-alarm",             Color="#dc2626", Bg="#fef2f2" },
+        new { Id="kpiValue",    Label="Total Offer Value",     Icon="bi-cash-stack",        Color="#16a34a", Bg="#f0fdf4" },
+    })
+    {
+        <div class="ptc-card" style="padding:14px 18px;display:flex;align-items:center;gap:12px;border-left:4px solid @k.Color;">
+            <div style="width:38px;height:38px;border-radius:10px;background:@k.Bg;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="bi @k.Icon" style="font-size:18px;color:@k.Color;"></i>
+            </div>
+            <div>
+                <div id="@k.Id" style="font-size:1.15rem;font-weight:700;line-height:1;color:#0f172a;">—</div>
+                <div style="font-size:0.72rem;color:#64748b;margin-top:3px;">@k.Label</div>
+            </div>
+        </div>
+    }
+</div>
+
+<div id="reportResults" style="display:none;">
+    <div class="ptc-card">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-hourglass-split"></i> Open Negotiation Register</h2>
+            <span id="recordCount" class="record-count-badge">0 records</span>
+        </div>
+        <div class="ptc-card-body" style="padding:0;">
+            <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                    <thead>
+                        <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;width:8px;"></th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">File No.</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Claimant</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Caseworker</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Offer Date</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Direction</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:right;">Offer (MYR)</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Recovery %</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Status</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Expiry Date</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Days Left</th>
+                            <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Offered By</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyOffers"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="reportLoading" style="display:none;text-align:center;padding:48px;">
+    <div class="spinner-border text-primary" role="status" style="width:2.5rem;height:2.5rem;"></div>
+    <div style="margin-top:12px;color:#64748b;font-size:0.88rem;">Generating report...</div>
+</div>
+
+@section Scripts {
+<script>
+var caseworkers = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+    caseworkers.Select(c => new { Id = (int)c.Id, FullName = (string)c.FullName })));
+
+var statusColorMap = {
+    'Open':      { bg:'#fef3c7', color:'#92400e' },
+    'Countered': { bg:'#e0e7ff', color:'#3730a3' }
+};
+var dirStyleMap = {
+    'From Insurer': { bg:'#dbeafe', color:'#1d40ae' },
+    'Counter Offer':{ bg:'#fce7f3', color:'#9d174d' }
+};
+
+$(function () {
+    kendo.culture('en-GB');
+    $('#ddlCaseworker').kendoDropDownList({
+        dataTextField:'FullName', dataValueField:'Id', optionLabel:'All Caseworkers',
+        dataSource: caseworkers || []
+    });
+    $('#ddlOfferStatus').kendoDropDownList({
+        dataTextField:'text', dataValueField:'value',
+        optionLabel: 'Open + Countered',
+        dataSource:[
+            { text:'Open Only',      value:'Open'      },
+            { text:'Countered Only', value:'Countered' }
+        ]
+    });
+    runReport();
+});
+
+function getParams() {
+    return {
+        caseworkerId: $('#ddlCaseworker').data('kendoDropDownList') ? $('#ddlCaseworker').data('kendoDropDownList').value() : '',
+        offerStatus:  $('#ddlOfferStatus').data('kendoDropDownList') ? $('#ddlOfferStatus').data('kendoDropDownList').value() : '',
+        __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+    };
+}
+
+function runReport() {
+    $('#reportResults,#kpiStrip').hide();
+    $('#reportLoading').show();
+
+    $.post('@Url.Action("OutstandingOfferRegisterData","FinancialReport")', getParams(), function (r) {
+        $('#reportLoading').hide();
+        if (!r || r.success === false) { KSwal.error('Error', r.message || 'Failed.'); return; }
+
+        $('#kpiTotal').text(r.total || 0);
+        $('#kpiOpen').text(r.openCount || 0);
+        $('#kpiCountered').text(r.counteredCount || 0);
+        $('#kpiExpiring').text(r.expiringSoon || 0);
+        $('#kpiValue').text('RM ' + kendo.toString(r.totalValue || 0, 'n2'));
+        $('#kpiStrip').css('display','grid');
+        $('#recordCount').text((r.total||0) + ' records');
+
+        var tbody = $('#tbodyOffers').empty();
+        (r.rows || []).forEach(function(o, i) {
+            var sMap = statusColorMap[o.OfferStatus] || { bg:'#e2e8f0', color:'#475569' };
+            var dMap = dirStyleMap[o.OfferDirection]  || { bg:'#e2e8f0', color:'#475569' };
+
+            var rowBg = o.IsExpired      ? '#fef2f2'
+                      : o.IsExpiringSoon ? '#fffbeb'
+                      : (i%2===0 ? '' : '#f8fafc');
+
+            var urgencyBar = o.IsExpired      ? '#dc2626'
+                           : o.IsExpiringSoon ? '#d97706' : '#e2e8f0';
+
+            var daysLeftHtml = o.DaysToExpiry === null
+                ? '<span style="color:#94a3b8;">No expiry</span>'
+                : o.IsExpired
+                ? '<span style="color:#dc2626;font-weight:700;">Expired</span>'
+                : '<span style="font-weight:700;color:' + (o.IsExpiringSoon?'#d97706':'#16a34a') + ';">' + o.DaysToExpiry + 'd</span>';
+
+            var recBadge = o.RecoveryPct !== null
+                ? '<span style="font-size:0.78rem;font-weight:700;color:' + (o.RecoveryPct>=70?'#16a34a':o.RecoveryPct>=50?'#d97706':'#dc2626') + ';">' + o.RecoveryPct + '%</span>'
+                : '<span style="color:#94a3b8;">—</span>';
+
+            var offerDate  = o.OfferDate   ? kendo.toString(kendo.parseDate(o.OfferDate),'dd/MM/yyyy')         : '—';
+            var expiryDate = o.OfferExpiryDate ? kendo.toString(kendo.parseDate(o.OfferExpiryDate),'dd/MM/yyyy') : '—';
+
+            tbody.append('<tr style="border-bottom:1px solid #f1f5f9;background:' + rowBg + ';">'
+                + '<td style="padding:0;"><div style="width:4px;height:44px;background:' + urgencyBar + ';border-radius:0;"></div></td>'
+                + '<td style="padding:9px 14px;"><a href="@Url.Action("EditCase","Case")?id=' + o.CaseFileId
+                + '" style="font-family:monospace;font-weight:700;font-size:0.82rem;color:#1d6fa4;">'
+                + $('<div>').text(o.FileNumber||'').html() + '</a>'
+                + '<div style="font-size:0.71rem;color:#64748b;">' + $('<div>').text(o.ClaimantName||'').html() + '</div></td>'
+                + '<td style="padding:9px 14px;font-size:0.8rem;">' + $('<div>').text(o.ClaimantName||'').html() + '</td>'
+                + '<td style="padding:9px 14px;font-size:0.8rem;">' + $('<div>').text(o.CaseworkerName||'').html() + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;">' + offerDate + '</td>'
+                + '<td style="padding:9px 14px;"><span style="background:' + dMap.bg + ';color:' + dMap.color + ';padding:2px 7px;border-radius:20px;font-size:0.7rem;font-weight:700;">' + $('<div>').text(o.OfferDirection||'').html() + '</span></td>'
+                + '<td style="padding:9px 14px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;">RM ' + kendo.toString(o.OfferAmount,'n2') + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;">' + recBadge + '</td>'
+                + '<td style="padding:9px 14px;"><span style="background:' + sMap.bg + ';color:' + sMap.color + ';padding:2px 7px;border-radius:20px;font-size:0.7rem;font-weight:700;">' + $('<div>').text(o.OfferStatus||'').html() + '</span></td>'
+                + '<td style="padding:9px 14px;text-align:center;">' + expiryDate + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;">' + daysLeftHtml + '</td>'
+                + '<td style="padding:9px 14px;font-size:0.8rem;">' + $('<div>').text(o.OfferedBy||'—').html() + '</td>'
+                + '</tr>');
+        });
+
+        $('#reportResults').show();
+        $('#btnExcel').prop('disabled', false);
+    }).fail(function(){ $('#reportLoading').hide(); KSwal.error('Error','Server error.'); });
+}
+
+function exportExcel() {
+    var p = getParams();
+    var form = $('<form method="POST" action="@Url.Action("OutstandingOfferRegisterExcel","FinancialReport")">');
+    $.each(p, function(k,v){ form.append($('<input type="hidden">').attr('name',k).val(v)); });
+    $('body').append(form); form.submit(); form.remove();
+    KSwal.toast('info','Preparing Excel file...');
+}
+</script>
+}

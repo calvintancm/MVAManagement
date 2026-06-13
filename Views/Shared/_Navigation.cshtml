@@ -860,71 +860,55 @@
             @* ════ REPORTS ════ *@
             <li class="sb-section-title">Reports</li>
 
+            @* ── Case Management Reports ── *@
             <li class="has-submenu">
                 <button class="sb-nav-link" data-bs-toggle="collapse"
-                        data-bs-target="#menuReports" aria-expanded="false"
-                        data-ptc-tooltip="Reports">
-                    <span class="sb-nav-icon"><i class="bi bi-bar-chart-line"></i></span>
-                    <span class="sb-nav-label">Reports</span>
+                        data-bs-target="#menuRptCase" aria-expanded="false"
+                        data-ptc-tooltip="Case Management Reports">
+                    <span class="sb-nav-icon"><i class="bi bi-folder2-open"></i></span>
+                    <span class="sb-nav-label">Case Management</span>
                     <i class="bi bi-chevron-right sb-chevron"></i>
                 </button>
 
-                <ul class="collapse sb-submenu" id="menuReports">
+                <ul class="collapse sb-submenu" id="menuRptCase">
                     <li>
-                        @if (canViewReports)
+                        @if (isCaseworker)
                         {
-                            <a class="sb-nav-link" asp-controller="Report" asp-action="CaseSummary"
-                               data-ptc-tooltip="Case Summary Report">
-                                <span class="sb-nav-icon"><i class="bi bi-clipboard-data"></i></span>
-                                <span class="sb-nav-label">Case Summary</span>
+                            <a class="sb-nav-link" asp-controller="CaseReport" asp-action="CaseStatusSummary"
+                               data-ptc-tooltip="Case Status Summary">
+                                <span class="sb-nav-icon"><i class="bi bi-bar-chart-line"></i></span>
+                                <span class="sb-nav-label">Case Status Summary</span>
                             </a>
                         }
                         else
                         {
                             <a class="sb-nav-link disabled" tabindex="-1" aria-disabled="true">
-                                <span class="sb-nav-icon"><i class="bi bi-clipboard-data text-muted"></i></span>
-                                <span class="sb-nav-label text-muted">Case Summary</span>
+                                <span class="sb-nav-icon"><i class="bi bi-bar-chart-line text-muted"></i></span>
+                                <span class="sb-nav-label text-muted">Case Status Summary</span>
                             </a>
                         }
                     </li>
                     <li>
-                        @if (canViewReports)
+                        @if (isCaseworker)
                         {
-                            <a class="sb-nav-link" asp-controller="Report" asp-action="LimitationAlert"
-                               data-ptc-tooltip="Limitation Alert Report">
-                                <span class="sb-nav-icon"><i class="bi bi-shield-exclamation"></i></span>
-                                <span class="sb-nav-label">Limitation Alerts</span>
+                            <a class="sb-nav-link" asp-controller="CaseReport" asp-action="CaseAge"
+                               data-ptc-tooltip="Case Age & Limitation Alert">
+                                <span class="sb-nav-icon"><i class="bi bi-clock-history"></i></span>
+                                <span class="sb-nav-label">Case Age &amp; Limitation</span>
                             </a>
                         }
                         else
                         {
                             <a class="sb-nav-link disabled" tabindex="-1" aria-disabled="true">
-                                <span class="sb-nav-icon"><i class="bi bi-shield-exclamation text-muted"></i></span>
-                                <span class="sb-nav-label text-muted">Limitation Alerts</span>
+                                <span class="sb-nav-icon"><i class="bi bi-clock-history text-muted"></i></span>
+                                <span class="sb-nav-label text-muted">Case Age &amp; Limitation</span>
                             </a>
                         }
                     </li>
                     <li>
-                        @if (canViewReports)
+                        @if (isCaseworker)
                         {
-                            <a class="sb-nav-link" asp-controller="Report" asp-action="DisbursementSummary"
-                               data-ptc-tooltip="Disbursement Summary">
-                                <span class="sb-nav-icon"><i class="bi bi-receipt"></i></span>
-                                <span class="sb-nav-label">Disbursement Summary</span>
-                            </a>
-                        }
-                        else
-                        {
-                            <a class="sb-nav-link disabled" tabindex="-1" aria-disabled="true">
-                                <span class="sb-nav-icon"><i class="bi bi-receipt text-muted"></i></span>
-                                <span class="sb-nav-label text-muted">Disbursement Summary</span>
-                            </a>
-                        }
-                    </li>
-                    <li>
-                        @if (canViewReports)
-                        {
-                            <a class="sb-nav-link" asp-controller="Report" asp-action="CaseworkerWorkload"
+                            <a class="sb-nav-link" asp-controller="CaseReport" asp-action="CaseworkerWorkload"
                                data-ptc-tooltip="Caseworker Workload">
                                 <span class="sb-nav-icon"><i class="bi bi-people"></i></span>
                                 <span class="sb-nav-label">Caseworker Workload</span>
@@ -939,64 +923,291 @@
                         }
                     </li>
                     <li>
-                        @if (canViewReports)
+                        @if (isCaseworker)
                         {
-                            <a class="sb-nav-link" asp-controller="Report" asp-action="Export"
-                               data-ptc-tooltip="Export to Excel">
-                                <span class="sb-nav-icon"><i class="bi bi-download"></i></span>
-                                <span class="sb-nav-label">Export to Excel</span>
+                            <a class="sb-nav-link" asp-controller="CaseReport" asp-action="NewCasesByPeriod"
+                               data-ptc-tooltip="New Cases by Period">
+                                <span class="sb-nav-icon"><i class="bi bi-graph-up-arrow"></i></span>
+                                <span class="sb-nav-label">New Cases by Period</span>
                             </a>
                         }
                         else
                         {
                             <a class="sb-nav-link disabled" tabindex="-1" aria-disabled="true">
-                                <span class="sb-nav-icon"><i class="bi bi-download text-muted"></i></span>
-                                <span class="sb-nav-label text-muted">Export to Excel</span>
+                                <span class="sb-nav-icon"><i class="bi bi-graph-up-arrow text-muted"></i></span>
+                                <span class="sb-nav-label text-muted">New Cases by Period</span>
                             </a>
                         }
                     </li>
                 </ul>
 
                 <div class="sb-flyout">
-                    <div class="sb-flyout-header">Reports</div>
-                    @if (canViewReports)
+                    <div class="sb-flyout-header">Case Management Reports</div>
+                    @if (isCaseworker)
                     {
-                        <a class="sb-flyout-item" asp-controller="Report" asp-action="CaseSummary">
-                            <i class="bi bi-clipboard-data"></i> Case Summary
+                        <a class="sb-flyout-item" asp-controller="CaseReport" asp-action="CaseStatusSummary">
+                            <i class="bi bi-bar-chart-line"></i> Case Status Summary
                         </a>
-                        <a class="sb-flyout-item" asp-controller="Report" asp-action="LimitationAlert">
-                            <i class="bi bi-shield-exclamation"></i> Limitation Alerts
+                        <a class="sb-flyout-item" asp-controller="CaseReport" asp-action="CaseAge">
+                            <i class="bi bi-clock-history"></i> Case Age &amp; Limitation
                         </a>
-                        <a class="sb-flyout-item" asp-controller="Report" asp-action="DisbursementSummary">
-                            <i class="bi bi-receipt"></i> Disbursement Summary
-                        </a>
-                        <a class="sb-flyout-item" asp-controller="Report" asp-action="CaseworkerWorkload">
+                        <a class="sb-flyout-item" asp-controller="CaseReport" asp-action="CaseworkerWorkload">
                             <i class="bi bi-people"></i> Caseworker Workload
                         </a>
-                        <a class="sb-flyout-item" asp-controller="Report" asp-action="Export">
-                            <i class="bi bi-download"></i> Export to Excel
+                        <a class="sb-flyout-item" asp-controller="CaseReport" asp-action="NewCasesByPeriod">
+                            <i class="bi bi-graph-up-arrow"></i> New Cases by Period
                         </a>
                     }
                     else
                     {
-                        <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true">
-                            <i class="bi bi-clipboard-data text-muted"></i> Case Summary
-                        </a>
-                        <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true">
-                            <i class="bi bi-shield-exclamation text-muted"></i> Limitation Alerts
-                        </a>
-                        <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true">
-                            <i class="bi bi-receipt text-muted"></i> Disbursement Summary
-                        </a>
-                        <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true">
-                            <i class="bi bi-people text-muted"></i> Caseworker Workload
-                        </a>
-                        <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true">
-                            <i class="bi bi-download text-muted"></i> Export to Excel
-                        </a>
+                        <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true"><i class="bi bi-bar-chart-line text-muted"></i> Case Status Summary</a>
+                        <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true"><i class="bi bi-clock-history text-muted"></i> Case Age &amp; Limitation</a>
+                        <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true"><i class="bi bi-people text-muted"></i> Caseworker Workload</a>
+                        <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true"><i class="bi bi-graph-up-arrow text-muted"></i> New Cases by Period</a>
                     }
                 </div>
             </li>
+
+            @* ── Financial Reports ── *@
+            <li class="has-submenu">
+                <button class="sb-nav-link" data-bs-toggle="collapse"
+                        data-bs-target="#menuRptFinancial" aria-expanded="false"
+                        data-ptc-tooltip="Financial Reports">
+                    <span class="sb-nav-icon"><i class="bi bi-cash-stack"></i></span>
+                    <span class="sb-nav-label">Financial Reports</span>
+                    <i class="bi bi-chevron-right sb-chevron"></i>
+                </button>
+
+                <ul class="collapse sb-submenu" id="menuRptFinancial">
+                    <li>
+                        @if (isSolicitor)
+                        {
+                            <a class="sb-nav-link" asp-controller="FinancialReport" asp-action="SettlementSummary"
+                               data-ptc-tooltip="Settlement Summary">
+                                <span class="sb-nav-icon"><i class="bi bi-currency-exchange"></i></span>
+                                <span class="sb-nav-label">Settlement Summary</span>
+                            </a>
+                        }
+                        else
+                        {
+                            <a class="sb-nav-link disabled" tabindex="-1" aria-disabled="true">
+                                <span class="sb-nav-icon"><i class="bi bi-currency-exchange text-muted"></i></span>
+                                <span class="sb-nav-label text-muted">Settlement Summary</span>
+                            </a>
+                        }
+                    </li>
+                    <li>
+                        @if (isSolicitor)
+                        {
+                            <a class="sb-nav-link" asp-controller="FinancialReport" asp-action="DisbursementsByCategory"
+                               data-ptc-tooltip="Disbursements by Category">
+                                <span class="sb-nav-icon"><i class="bi bi-receipt-cutoff"></i></span>
+                                <span class="sb-nav-label">Disbursements by Category</span>
+                            </a>
+                        }
+                        else
+                        {
+                            <a class="sb-nav-link disabled" tabindex="-1" aria-disabled="true">
+                                <span class="sb-nav-icon"><i class="bi bi-receipt-cutoff text-muted"></i></span>
+                                <span class="sb-nav-label text-muted">Disbursements by Category</span>
+                            </a>
+                        }
+                    </li>
+                    <li>
+                        @if (isSolicitor)
+                        {
+                            <a class="sb-nav-link" asp-controller="FinancialReport" asp-action="UnrecoveredDisbursements"
+                               data-ptc-tooltip="Unrecovered Disbursements">
+                                <span class="sb-nav-icon"><i class="bi bi-arrow-repeat"></i></span>
+                                <span class="sb-nav-label">Unrecovered Disbursements</span>
+                            </a>
+                        }
+                        else
+                        {
+                            <a class="sb-nav-link disabled" tabindex="-1" aria-disabled="true">
+                                <span class="sb-nav-icon"><i class="bi bi-arrow-repeat text-muted"></i></span>
+                                <span class="sb-nav-label text-muted">Unrecovered Disbursements</span>
+                            </a>
+                        }
+                    </li>
+                    <li>
+                        @if (isSolicitor)
+                        {
+                            <a class="sb-nav-link" asp-controller="FinancialReport" asp-action="OutstandingOfferRegister"
+                               data-ptc-tooltip="Outstanding Offer Register">
+                                <span class="sb-nav-icon"><i class="bi bi-hourglass-split"></i></span>
+                                <span class="sb-nav-label">Outstanding Offer Register</span>
+                            </a>
+                        }
+                        else
+                        {
+                            <a class="sb-nav-link disabled" tabindex="-1" aria-disabled="true">
+                                <span class="sb-nav-icon"><i class="bi bi-hourglass-split text-muted"></i></span>
+                                <span class="sb-nav-label text-muted">Outstanding Offer Register</span>
+                            </a>
+                        }
+                    </li>
+                </ul>
+
+                <div class="sb-flyout">
+                    <div class="sb-flyout-header">Financial Reports</div>
+                    @if (isSolicitor)
+                    {
+                        <a class="sb-flyout-item" asp-controller="FinancialReport" asp-action="SettlementSummary">
+                            <i class="bi bi-currency-exchange"></i> Settlement Summary
+                        </a>
+                        <a class="sb-flyout-item" asp-controller="FinancialReport" asp-action="DisbursementsByCategory">
+                            <i class="bi bi-receipt-cutoff"></i> Disbursements by Category
+                        </a>
+                        <a class="sb-flyout-item" asp-controller="FinancialReport" asp-action="UnrecoveredDisbursements">
+                            <i class="bi bi-arrow-repeat"></i> Unrecovered Disbursements
+                        </a>
+                        <a class="sb-flyout-item" asp-controller="FinancialReport" asp-action="OutstandingOfferRegister">
+                            <i class="bi bi-hourglass-split"></i> Outstanding Offer Register
+                        </a>
+                    }
+                    else
+                    {
+                        <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true"><i class="bi bi-currency-exchange text-muted"></i> Settlement Summary</a>
+                        <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true"><i class="bi bi-receipt-cutoff text-muted"></i> Disbursements by Category</a>
+                        <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true"><i class="bi bi-arrow-repeat text-muted"></i> Unrecovered Disbursements</a>
+                        <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true"><i class="bi bi-hourglass-split text-muted"></i> Outstanding Offer Register</a>
+                    }
+                </div>
+            </li>
+
+            @* ── Litigation & Court Reports ── *@
+            <li class="has-submenu">
+                <button class="sb-nav-link" data-bs-toggle="collapse"
+                        data-bs-target="#menuRptLitigation" aria-expanded="false"
+                        data-ptc-tooltip="Litigation & Court Reports">
+                    <span class="sb-nav-icon"><i class="bi bi-bank2"></i></span>
+                    <span class="sb-nav-label">Litigation &amp; Court</span>
+                    <i class="bi bi-chevron-right sb-chevron"></i>
+                </button>
+
+                <ul class="collapse sb-submenu" id="menuRptLitigation">
+                    <li>
+                        @if (isCaseworker)
+                        {
+                            <a class="sb-nav-link" asp-controller="LitigationReport" asp-action="HearingSchedule"
+                               data-ptc-tooltip="Hearing Schedule">
+                                <span class="sb-nav-icon"><i class="bi bi-calendar-event"></i></span>
+                                <span class="sb-nav-label">Hearing Schedule</span>
+                            </a>
+                        }
+                        else
+                        {
+                            <a class="sb-nav-link disabled" tabindex="-1" aria-disabled="true">
+                                <span class="sb-nav-icon"><i class="bi bi-calendar-event text-muted"></i></span>
+                                <span class="sb-nav-label text-muted">Hearing Schedule</span>
+                            </a>
+                        }
+                    </li>
+                    <li>
+                        @if (isCaseworker)
+                        {
+                            <a class="sb-nav-link" asp-controller="LitigationReport" asp-action="LitigationCases"
+                               data-ptc-tooltip="Litigation Cases">
+                                <span class="sb-nav-icon"><i class="bi bi-journal-text"></i></span>
+                                <span class="sb-nav-label">Litigation Cases</span>
+                            </a>
+                        }
+                        else
+                        {
+                            <a class="sb-nav-link disabled" tabindex="-1" aria-disabled="true">
+                                <span class="sb-nav-icon"><i class="bi bi-journal-text text-muted"></i></span>
+                                <span class="sb-nav-label text-muted">Litigation Cases</span>
+                            </a>
+                        }
+                    </li>
+                </ul>
+
+                <div class="sb-flyout">
+                    <div class="sb-flyout-header">Litigation &amp; Court Reports</div>
+                    @if (isCaseworker)
+                    {
+                        <a class="sb-flyout-item" asp-controller="LitigationReport" asp-action="HearingSchedule">
+                            <i class="bi bi-calendar-event"></i> Hearing Schedule
+                        </a>
+                        <a class="sb-flyout-item" asp-controller="LitigationReport" asp-action="LitigationCases">
+                            <i class="bi bi-journal-text"></i> Litigation Cases
+                        </a>
+                    }
+                    else
+                    {
+                        <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true"><i class="bi bi-calendar-event text-muted"></i> Hearing Schedule</a>
+                        <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true"><i class="bi bi-journal-text text-muted"></i> Litigation Cases</a>
+                    }
+                </div>
+            </li>
+
+            @* ── Medical & Documents Reports ── *@
+            <li class="has-submenu">
+                <button class="sb-nav-link" data-bs-toggle="collapse"
+                        data-bs-target="#menuRptMedical" aria-expanded="false"
+                        data-ptc-tooltip="Medical & Documents Reports">
+                    <span class="sb-nav-icon"><i class="bi bi-clipboard2-pulse"></i></span>
+                    <span class="sb-nav-label">Medical &amp; Documents</span>
+                    <i class="bi bi-chevron-right sb-chevron"></i>
+                </button>
+
+                <ul class="collapse sb-submenu" id="menuRptMedical">
+                    <li>
+                        @if (isCaseworker)
+                        {
+                            <a class="sb-nav-link" asp-controller="MedicalDocReport" asp-action="PendingMedicalReports"
+                               data-ptc-tooltip="Pending Medical Reports">
+                                <span class="sb-nav-icon"><i class="bi bi-file-earmark-medical"></i></span>
+                                <span class="sb-nav-label">Pending Medical Reports</span>
+                            </a>
+                        }
+                        else
+                        {
+                            <a class="sb-nav-link disabled" tabindex="-1" aria-disabled="true">
+                                <span class="sb-nav-icon"><i class="bi bi-file-earmark-medical text-muted"></i></span>
+                                <span class="sb-nav-label text-muted">Pending Medical Reports</span>
+                            </a>
+                        }
+                    </li>
+                    <li>
+                        @if (isCaseworker)
+                        {
+                            <a class="sb-nav-link" asp-controller="MedicalDocReport" asp-action="OutstandingDocuments"
+                               data-ptc-tooltip="Outstanding Documents Checklist">
+                                <span class="sb-nav-icon"><i class="bi bi-file-earmark-x"></i></span>
+                                <span class="sb-nav-label">Outstanding Documents</span>
+                            </a>
+                        }
+                        else
+                        {
+                            <a class="sb-nav-link disabled" tabindex="-1" aria-disabled="true">
+                                <span class="sb-nav-icon"><i class="bi bi-file-earmark-x text-muted"></i></span>
+                                <span class="sb-nav-label text-muted">Outstanding Documents</span>
+                            </a>
+                        }
+                    </li>
+                </ul>
+
+                <div class="sb-flyout">
+                    <div class="sb-flyout-header">Medical &amp; Documents Reports</div>
+                    @if (isCaseworker)
+                    {
+                        <a class="sb-flyout-item" asp-controller="MedicalDocReport" asp-action="PendingMedicalReports">
+                            <i class="bi bi-file-earmark-medical"></i> Pending Medical Reports
+                        </a>
+                        <a class="sb-flyout-item" asp-controller="MedicalDocReport" asp-action="OutstandingDocuments">
+                            <i class="bi bi-file-earmark-x"></i> Outstanding Documents
+                        </a>
+                    }
+                    else
+                    {
+                        <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true"><i class="bi bi-file-earmark-medical text-muted"></i> Pending Medical Reports</a>
+                        <a class="sb-flyout-item disabled" tabindex="-1" aria-disabled="true"><i class="bi bi-file-earmark-x text-muted"></i> Outstanding Documents</a>
+                    }
+                </div>
+            </li>
+
 
             @* ════ SETTINGS ════ *@
             <li class="sb-section-title">Settings</li>

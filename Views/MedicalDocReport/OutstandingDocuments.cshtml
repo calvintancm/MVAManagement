@@ -1,0 +1,339 @@
+@{
+    ViewData["Title"] = "Outstanding Documents Checklist";
+    ViewData["BreadcrumbSection"] = "Reports";
+    ViewData["BreadcrumbPage"] = "Outstanding Documents";
+
+    var caseworkers = ViewBag.Caseworkers as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Outstanding Documents Checklist</h1>
+        <p class="page-subtitle">All unreceived documents grouped by case file — for client follow-up</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-ptc-primary" onclick="runReport()">
+            <i class="bi bi-play-fill"></i> Run Report
+        </button>
+        <button class="btn-ptc-outline" id="btnExcel" onclick="exportExcel()" disabled>
+            <i class="bi bi-file-earmark-excel"></i> Export Excel
+        </button>
+    </div>
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title"><i class="bi bi-funnel"></i> Report Filters</h2>
+    </div>
+    <div class="ptc-card-body" style="padding:20px 24px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:18px;">
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:175px;">
+                <label class="filter-label">Caseworker</label>
+                <select id="ddlCaseworker" style="width:175px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:155px;">
+                <label class="filter-label">Document Category</label>
+                <select id="ddlCategory" style="width:155px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:160px;">
+                <label class="filter-label">Expected From</label>
+                <select id="ddlExpectedFrom" style="width:160px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:155px;">
+                <label class="filter-label">Collection Status</label>
+                <select id="ddlStatus" style="width:155px;"></select>
+            </div>
+            <div style="padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="runReport()">
+                    <i class="bi bi-play-fill"></i> Generate
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* KPI strip *@
+<div id="kpiStrip" style="display:none;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;">
+    @foreach (var k in new[] {
+        new { Id="kpiTotal",    Label="Total Outstanding",  Icon="bi-file-earmark-x",    Color="#dc2626", Bg="#fef2f2" },
+        new { Id="kpiAwaiting", Label="Awaiting",           Icon="bi-clock",             Color="#d97706", Bg="#fffbeb" },
+        new { Id="kpiReq",      Label="Requested",          Icon="bi-send",              Color="#1d6fa4", Bg="#eff6ff" },
+        new { Id="kpiCases",    Label="Cases Affected",     Icon="bi-folder2-open",      Color="#7c3aed", Bg="#faf5ff" },
+    })
+    {
+        <div class="ptc-card" style="padding:14px 18px;display:flex;align-items:center;gap:12px;border-left:4px solid @k.Color;">
+            <div style="width:38px;height:38px;border-radius:10px;background:@k.Bg;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="bi @k.Icon" style="font-size:18px;color:@k.Color;"></i>
+            </div>
+            <div>
+                <div id="@k.Id" style="font-size:1.4rem;font-weight:700;line-height:1;color:#0f172a;">—</div>
+                <div style="font-size:0.72rem;color:#64748b;margin-top:3px;">@k.Label</div>
+            </div>
+        </div>
+    }
+</div>
+
+<div id="reportResults" style="display:none;">
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;">
+        @* By Category *@
+        <div class="ptc-card">
+            <div class="ptc-card-header">
+                <h2 class="ptc-card-title"><i class="bi bi-folder"></i> By Category</h2>
+            </div>
+            <div class="ptc-card-body" style="padding:0;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.83rem;">
+                    <thead>
+                        <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                            <th style="padding:9px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Category</th>
+                            <th style="padding:9px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Count</th>
+                            <th style="padding:9px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Share</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyCategory"></tbody>
+                </table>
+            </div>
+        </div>
+        @* By Source *@
+        <div class="ptc-card">
+            <div class="ptc-card-header">
+                <h2 class="ptc-card-title"><i class="bi bi-signpost-split"></i> By Expected From</h2>
+            </div>
+            <div class="ptc-card-body" style="padding:0;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.83rem;">
+                    <thead>
+                        <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                            <th style="padding:9px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Source</th>
+                            <th style="padding:9px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Count</th>
+                            <th style="padding:9px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Share</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodySource"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    @* By case file — collapsible checklist *@
+    <div class="ptc-card mb-3">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-list-check"></i> Case File Checklist</h2>
+            <span id="caseCount" class="record-count-badge">0 cases</span>
+        </div>
+        <div class="ptc-card-body" style="padding:0;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                <thead>
+                    <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;width:32px;"></th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">File No.</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Claimant</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Caseworker</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Case Status</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Awaiting</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Requested</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Total</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyCases"></tbody>
+            </table>
+        </div>
+    </div>
+
+    @* Flat detail table *@
+    <div class="ptc-card">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-file-earmark-text"></i> Document Detail</h2>
+            <span id="recordCount" class="record-count-badge">0 records</span>
+        </div>
+        <div class="ptc-card-body" style="padding:0;max-height:420px;overflow-y:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                <thead style="position:sticky;top:0;z-index:1;">
+                    <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">File No.</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Claimant</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Caseworker</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Document</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Category</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Expected From</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Status</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Remarks</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyDetail"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="reportLoading" style="display:none;text-align:center;padding:48px;">
+    <div class="spinner-border text-primary" role="status" style="width:2.5rem;height:2.5rem;"></div>
+    <div style="margin-top:12px;color:#64748b;font-size:0.88rem;">Generating report...</div>
+</div>
+
+@section Scripts {
+<script>
+var caseworkers = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+    caseworkers.Select(c => new { Id = (int)c.Id, FullName = (string)c.FullName })));
+
+var docCategories  = ['Police','Medical','Legal','Insurance','Financial','Court','Other'];
+var expectedFromList = ['Client','Hospital','Police','Insurer','Court Registry','Solicitor','Other'];
+var statusColorMap = {
+    'Awaiting':  { bg:'#fef3c7', color:'#92400e' },
+    'Requested': { bg:'#dbeafe', color:'#1d40ae' }
+};
+var categoryColorMap = {
+    'Police':'#1d6fa4','Medical':'#dc2626','Legal':'#7c3aed',
+    'Insurance':'#d97706','Financial':'#16a34a','Court':'#0e7490','Other':'#64748b'
+};
+
+$(function () {
+    kendo.culture('en-GB');
+    $('#ddlCaseworker').kendoDropDownList({ dataTextField:'FullName', dataValueField:'Id', optionLabel:'All Caseworkers', dataSource: caseworkers || [] });
+    $('#ddlCategory').kendoDropDownList({ dataSource: docCategories, optionLabel:'All Categories' });
+    $('#ddlExpectedFrom').kendoDropDownList({ dataSource: expectedFromList, optionLabel:'All Sources' });
+    $('#ddlStatus').kendoDropDownList({
+        dataTextField:'text', dataValueField:'value',
+        optionLabel: 'Awaiting + Requested',
+        dataSource:[{ text:'Awaiting Only', value:'Awaiting' },{ text:'Requested Only', value:'Requested' }]
+    });
+    runReport();
+});
+
+function getParams() {
+    return {
+        caseworkerId:     $('#ddlCaseworker').data('kendoDropDownList') ? $('#ddlCaseworker').data('kendoDropDownList').value() : '',
+        category:         $('#ddlCategory').data('kendoDropDownList') ? $('#ddlCategory').data('kendoDropDownList').value() : '',
+        expectedFrom:     $('#ddlExpectedFrom').data('kendoDropDownList') ? $('#ddlExpectedFrom').data('kendoDropDownList').value() : '',
+        collectionStatus: $('#ddlStatus').data('kendoDropDownList') ? $('#ddlStatus').data('kendoDropDownList').value() : '',
+        __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+    };
+}
+
+function runReport() {
+    $('#reportResults,#kpiStrip').hide();
+    $('#reportLoading').show();
+
+    $.post('@Url.Action("OutstandingDocumentsData","MedicalDocReport")', getParams(), function (r) {
+        $('#reportLoading').hide();
+        if (!r || r.success === false) { KSwal.error('Error', r.message || 'Failed.'); return; }
+
+        $('#kpiTotal').text(r.total    || 0);
+        $('#kpiAwaiting').text(r.awaiting  || 0);
+        $('#kpiReq').text(r.requested  || 0);
+        $('#kpiCases').text(r.caseCount || 0);
+        $('#kpiStrip').css('display','grid');
+        $('#recordCount').text((r.total||0) + ' records');
+        $('#caseCount').text((r.caseCount||0) + ' cases');
+
+        // By category
+        var total = r.total || 1;
+        var tbody = $('#tbodyCategory').empty();
+        (r.byCategory || []).forEach(function(c, i) {
+            var color = categoryColorMap[c.Category] || '#64748b';
+            var pct   = ((c.Count / total) * 100).toFixed(1);
+            tbody.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + '">'
+                + '<td style="padding:9px 14px;"><span style="display:inline-flex;align-items:center;gap:6px;">'
+                + '<i class="bi bi-folder" style="color:' + color + ';font-size:13px;"></i>'
+                + '<span style="font-weight:600;color:' + color + ';">' + $('<div>').text(c.Category).html() + '</span></span></td>'
+                + '<td style="padding:9px 14px;text-align:center;font-weight:700;">' + c.Count + '</td>'
+                + '<td style="padding:9px 14px;"><div style="display:flex;align-items:center;gap:5px;">'
+                + '<div style="height:6px;width:70px;background:#e2e8f0;border-radius:3px;">'
+                + '<div style="height:100%;width:' + pct + '%;background:' + color + ';border-radius:3px;"></div></div>'
+                + '<span style="font-size:0.72rem;color:#64748b;">' + pct + '%</span></div></td></tr>');
+        });
+
+        // By source
+        var tbody2 = $('#tbodySource').empty();
+        (r.bySource || []).forEach(function(s, i) {
+            var pct = ((s.Count / total) * 100).toFixed(1);
+            tbody2.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + '">'
+                + '<td style="padding:9px 14px;">' + $('<div>').text(s.Source).html() + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;font-weight:700;">' + s.Count + '</td>'
+                + '<td style="padding:9px 14px;"><div style="display:flex;align-items:center;gap:5px;">'
+                + '<div style="height:6px;width:70px;background:#e2e8f0;border-radius:3px;">'
+                + '<div style="height:100%;width:' + pct + '%;background:#1d6fa4;border-radius:3px;"></div></div>'
+                + '<span style="font-size:0.72rem;color:#64748b;">' + pct + '%</span></div></td></tr>');
+        });
+
+        // By case file — collapsible
+        var tbody3 = $('#tbodyCases').empty();
+        (r.byCaseFile || []).forEach(function(cf, i) {
+            var rowId = 'cfRow_' + i;
+            tbody3.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + ';cursor:pointer;" onclick="toggleItems(\'' + rowId + '\')">'
+                + '<td style="padding:9px 14px;text-align:center;"><i id="icon_' + rowId + '" class="bi bi-chevron-right" style="font-size:11px;color:#94a3b8;transition:transform 0.2s;"></i></td>'
+                + '<td style="padding:9px 14px;"><a href="@Url.Action("EditCase","Case")?id=' + cf.CaseFileId
+                + '" style="font-family:monospace;font-weight:700;font-size:0.82rem;color:#1d6fa4;" onclick="event.stopPropagation();">'
+                + $('<div>').text(cf.FileNumber||'').html() + '</a></td>'
+                + '<td style="padding:9px 14px;">' + $('<div>').text(cf.ClaimantName||'').html() + '</td>'
+                + '<td style="padding:9px 14px;font-size:0.8rem;">' + $('<div>').text(cf.Caseworker||'').html() + '</td>'
+                + '<td style="padding:9px 14px;font-size:0.8rem;color:#64748b;">' + $('<div>').text(cf.CaseStatus||'').html() + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;color:#d97706;font-weight:600;">' + cf.Awaiting + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;color:#1d6fa4;font-weight:600;">' + cf.Requested + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;font-weight:700;">' + cf.Count + '</td>'
+                + '</tr>');
+
+            (cf.Items || []).forEach(function(item) {
+                var color  = categoryColorMap[item.DocumentCategory] || '#64748b';
+                var sMap   = statusColorMap[item.CollectionStatus] || { bg:'#e2e8f0', color:'#475569' };
+                tbody3.append('<tr id="' + rowId + '" style="display:none;background:#f0f9ff;border-bottom:1px solid #e0f2fe;">'
+                    + '<td></td>'
+                    + '<td colspan="2" style="padding:7px 14px 7px 28px;">'
+                    + '<span style="display:inline-flex;align-items:center;gap:5px;">'
+                    + '<i class="bi bi-file-earmark-text" style="color:' + color + ';font-size:12px;"></i>'
+                    + '<span style="font-size:0.8rem;font-weight:600;">' + $('<div>').text(item.DocumentName||'').html() + '</span></span></td>'
+                    + '<td style="padding:7px 14px;font-size:0.78rem;color:' + color + ';">' + $('<div>').text(item.DocumentCategory||'').html() + '</td>'
+                    + '<td style="padding:7px 14px;font-size:0.78rem;color:#64748b;">' + $('<div>').text(item.ExpectedFrom||'—').html() + '</td>'
+                    + '<td colspan="2" style="padding:7px 14px;text-align:center;"><span style="background:' + sMap.bg + ';color:' + sMap.color
+                    + ';padding:2px 7px;border-radius:20px;font-size:0.7rem;font-weight:700;">' + $('<div>').text(item.CollectionStatus||'').html() + '</span></td>'
+                    + '<td></td></tr>');
+            });
+        });
+
+        // Flat detail
+        var tbody4 = $('#tbodyDetail').empty();
+        (r.rows || []).forEach(function(d, i) {
+            var color = categoryColorMap[d.DocumentCategory] || '#64748b';
+            var sMap  = statusColorMap[d.CollectionStatus] || { bg:'#e2e8f0', color:'#475569' };
+            var remarks = d.Remarks && d.Remarks.length > 35 ? d.Remarks.substring(0,35)+'…' : (d.Remarks||'—');
+            tbody4.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + '">'
+                + '<td style="padding:8px 14px;"><a href="@Url.Action("EditCase","Case")?id=' + d.CaseFileId
+                + '" style="font-family:monospace;font-weight:700;font-size:0.82rem;color:#1d6fa4;">'
+                + $('<div>').text(d.FileNumber||'').html() + '</a></td>'
+                + '<td style="padding:8px 14px;font-size:0.8rem;">' + $('<div>').text(d.ClaimantName||'').html() + '</td>'
+                + '<td style="padding:8px 14px;font-size:0.8rem;">' + $('<div>').text(d.CaseworkerName||'').html() + '</td>'
+                + '<td style="padding:8px 14px;font-size:0.8rem;font-weight:600;">' + $('<div>').text(d.DocumentName||'').html() + '</td>'
+                + '<td style="padding:8px 14px;"><span style="display:inline-flex;align-items:center;gap:4px;">'
+                + '<i class="bi bi-folder" style="color:' + color + ';font-size:11px;"></i>'
+                + '<span style="font-size:0.78rem;color:' + color + ';font-weight:600;">' + $('<div>').text(d.DocumentCategory||'').html() + '</span></span></td>'
+                + '<td style="padding:8px 14px;font-size:0.78rem;color:#64748b;">' + $('<div>').text(d.ExpectedFrom||'—').html() + '</td>'
+                + '<td style="padding:8px 14px;text-align:center;"><span style="background:' + sMap.bg + ';color:' + sMap.color
+                + ';padding:2px 7px;border-radius:20px;font-size:0.7rem;font-weight:700;">' + $('<div>').text(d.CollectionStatus||'').html() + '</span></td>'
+                + '<td style="padding:8px 14px;font-size:0.78rem;color:#64748b;" title="' + $('<div>').text(d.Remarks||'').html() + '">' + $('<div>').text(remarks).html() + '</td>'
+                + '</tr>');
+        });
+
+        $('#reportResults').show();
+        $('#btnExcel').prop('disabled', false);
+    }).fail(function(){ $('#reportLoading').hide(); KSwal.error('Error','Server error.'); });
+}
+
+function toggleItems(rowId) {
+    var rows = $('tr[id="' + rowId + '"]');
+    var icon = $('#icon_' + rowId);
+    var isVisible = rows.first().is(':visible');
+    rows.toggle(!isVisible);
+    icon.css('transform', isVisible ? '' : 'rotate(90deg)');
+}
+
+function exportExcel() {
+    var p = getParams();
+    var form = $('<form method="POST" action="@Url.Action("OutstandingDocumentsExcel","MedicalDocReport")">');
+    $.each(p, function(k,v){ form.append($('<input type="hidden">').attr('name',k).val(v)); });
+    $('body').append(form); form.submit(); form.remove();
+    KSwal.toast('info','Preparing Excel file...');
+}
+</script>
+}

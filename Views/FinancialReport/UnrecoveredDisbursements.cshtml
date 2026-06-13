@@ -1,0 +1,277 @@
+@{
+    ViewData["Title"] = "Unrecovered Disbursements";
+    ViewData["BreadcrumbSection"] = "Reports";
+    ViewData["BreadcrumbPage"] = "Unrecovered Disbursements";
+
+    var caseworkers = ViewBag.Caseworkers as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var categories  = ViewBag.Categories  as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+}
+
+@Html.AntiForgeryToken()
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Unrecovered Disbursements</h1>
+        <p class="page-subtitle">All outstanding expenses pending recovery from defendant or insurer</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-ptc-primary" onclick="runReport()">
+            <i class="bi bi-play-fill"></i> Run Report
+        </button>
+        <button class="btn-ptc-outline" id="btnExcel" onclick="exportExcel()" disabled>
+            <i class="bi bi-file-earmark-excel"></i> Export Excel
+        </button>
+    </div>
+</div>
+
+@* Info banner *@
+<div class="ptc-card mb-3" style="border-left:4px solid #dc2626;">
+    <div class="ptc-card-body" style="padding:12px 20px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+            <i class="bi bi-info-circle-fill" style="color:#dc2626;font-size:18px;flex-shrink:0;"></i>
+            <div style="font-size:0.8rem;color:var(--text-muted);line-height:1.6;">
+                Shows all disbursements where <strong>IsRecovered = No</strong>.
+                Use this report for accounts follow-up — amounts are recoverable from the defendant
+                or insurer upon successful settlement.
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Filter Card *@
+<div class="ptc-card mb-3">
+    <div class="ptc-card-header">
+        <h2 class="ptc-card-title"><i class="bi bi-funnel"></i> Report Filters</h2>
+    </div>
+    <div class="ptc-card-body" style="padding:20px 24px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:18px;">
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:150px;">
+                <label class="filter-label">Date From</label>
+                <input type="text" id="dtFrom" class="k-textbox" style="width:150px;" placeholder="dd/MM/yyyy" />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:150px;">
+                <label class="filter-label">Date To</label>
+                <input type="text" id="dtTo" class="k-textbox" style="width:150px;" placeholder="dd/MM/yyyy" />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:175px;">
+                <label class="filter-label">Caseworker</label>
+                <select id="ddlCaseworker" style="width:175px;"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:185px;">
+                <label class="filter-label">Category</label>
+                <select id="ddlCategory" style="width:185px;"></select>
+            </div>
+            <div style="padding-bottom:1px;">
+                <button class="btn-ptc-primary" onclick="runReport()">
+                    <i class="bi bi-play-fill"></i> Generate
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* KPI strip *@
+<div id="kpiStrip" style="display:none;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;">
+    @foreach (var k in new[] {
+        new { Id="kpiCount",   Label="Total Records",       Icon="bi-receipt",      Color="#dc2626", Bg="#fef2f2" },
+        new { Id="kpiTotal",   Label="Total Unrecovered",   Icon="bi-cash-stack",   Color="#7c3aed", Bg="#faf5ff" },
+        new { Id="kpiCases",   Label="Cases Affected",      Icon="bi-folder2-open", Color="#1d6fa4", Bg="#eff6ff" },
+        new { Id="kpiTopCat",  Label="Top Category",        Icon="bi-bar-chart",    Color="#d97706", Bg="#fffbeb" },
+    })
+    {
+        <div class="ptc-card" style="padding:14px 18px;display:flex;align-items:center;gap:12px;border-left:4px solid @k.Color;">
+            <div style="width:38px;height:38px;border-radius:10px;background:@k.Bg;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="bi @k.Icon" style="font-size:18px;color:@k.Color;"></i>
+            </div>
+            <div>
+                <div id="@k.Id" style="font-size:1.15rem;font-weight:700;line-height:1;color:#0f172a;word-break:break-word;">—</div>
+                <div style="font-size:0.72rem;color:#64748b;margin-top:3px;">@k.Label</div>
+            </div>
+        </div>
+    }
+</div>
+
+<div id="reportResults" style="display:none;">
+
+    @* By case file (collapsible) *@
+    <div class="ptc-card mb-3">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-folder2-open"></i> By Case File</h2>
+            <span id="caseCount" class="record-count-badge">0 cases</span>
+        </div>
+        <div class="ptc-card-body" style="padding:0;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                <thead>
+                    <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;width:32px;"></th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">File No.</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Claimant</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Caseworker</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Case Status</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Items</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:right;">Total Unrecovered (MYR)</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyCases"></tbody>
+            </table>
+        </div>
+    </div>
+
+    @* Full transaction detail *@
+    <div class="ptc-card">
+        <div class="ptc-card-header">
+            <h2 class="ptc-card-title"><i class="bi bi-receipt-cutoff"></i> Transaction Detail</h2>
+            <span id="recordCount" class="record-count-badge">0 records</span>
+        </div>
+        <div class="ptc-card-body" style="padding:0;max-height:420px;overflow-y:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                <thead style="position:sticky;top:0;z-index:1;">
+                    <tr style="background:#f8fafc;font-size:0.75rem;color:#475569;font-weight:600;">
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">File No.</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Claimant</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">Date</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Category</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Description</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left;">Payee</th>
+                        <th style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:right;">Amount (MYR)</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyDetail"></tbody>
+                <tfoot>
+                    <tr id="tfootRow" style="display:none;background:#fee2e2;font-weight:700;">
+                        <td colspan="6" style="padding:9px 14px;text-align:right;">Grand Total Unrecovered:</td>
+                        <td id="tfootAmt" style="padding:9px 14px;text-align:right;font-variant-numeric:tabular-nums;color:#dc2626;"></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="reportLoading" style="display:none;text-align:center;padding:48px;">
+    <div class="spinner-border text-primary" role="status" style="width:2.5rem;height:2.5rem;"></div>
+    <div style="margin-top:12px;color:#64748b;font-size:0.88rem;">Generating report...</div>
+</div>
+
+@section Scripts {
+<script>
+var caseworkers = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+    caseworkers.Select(c => new { Id = (int)c.Id, FullName = (string)c.FullName })));
+var catList = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+    categories.Select(c => (string)c.CategoryName)));
+
+$(function () {
+    kendo.culture('en-GB');
+    $('#dtFrom,#dtTo').kendoDatePicker({ format:'dd/MM/yyyy', culture:'en-GB' });
+    $('#ddlCaseworker').kendoDropDownList({
+        dataTextField:'FullName', dataValueField:'Id', optionLabel:'All Caseworkers',
+        dataSource: caseworkers || []
+    });
+    $('#ddlCategory').kendoDropDownList({
+        dataSource: catList.length ? catList : ['Medical Report Fee','Court Filing Fee','Miscellaneous'],
+        optionLabel: 'All Categories'
+    });
+    runReport();
+});
+
+function getParams() {
+    var dpFrom = $('#dtFrom').data('kendoDatePicker');
+    var dpTo   = $('#dtTo').data('kendoDatePicker');
+    return {
+        dateFrom:     dpFrom && dpFrom.value() ? dpFrom.value().toISOString() : '',
+        dateTo:       dpTo   && dpTo.value()   ? dpTo.value().toISOString()   : '',
+        caseworkerId: $('#ddlCaseworker').data('kendoDropDownList') ? $('#ddlCaseworker').data('kendoDropDownList').value() : '',
+        category:     $('#ddlCategory').data('kendoDropDownList') ? $('#ddlCategory').data('kendoDropDownList').value() : '',
+        __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+    };
+}
+
+function runReport() {
+    $('#reportResults,#kpiStrip').hide();
+    $('#reportLoading').show();
+
+    $.post('@Url.Action("UnrecoveredDisbursementsData","FinancialReport")', getParams(), function (r) {
+        $('#reportLoading').hide();
+        if (!r || r.success === false) { KSwal.error('Error', r.message || 'Failed.'); return; }
+
+        $('#kpiCount').text(r.total || 0);
+        $('#kpiTotal').text('RM ' + kendo.toString(r.grandTotal || 0, 'n2'));
+        $('#kpiCases').text(r.caseCount || 0);
+        $('#kpiTopCat').text(r.topCategory || '—');
+        $('#kpiStrip').css('display','grid');
+        $('#recordCount').text((r.total||0) + ' records');
+        $('#caseCount').text((r.caseCount||0) + ' cases');
+
+        // By case file — collapsible rows
+        var tbody = $('#tbodyCases').empty();
+        (r.byCaseFile || []).forEach(function(cf, i) {
+            var rowId = 'cfRow_' + i;
+            tbody.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + ';cursor:pointer;" onclick="toggleItems(\'' + rowId + '\')">'
+                + '<td style="padding:9px 14px;text-align:center;"><i class="bi bi-chevron-right" id="icon_' + rowId + '" style="font-size:11px;color:#94a3b8;transition:transform 0.2s;"></i></td>'
+                + '<td style="padding:9px 14px;"><a href="@Url.Action("EditCase","Case")?id=' + cf.CaseFileId
+                + '" style="font-family:monospace;font-weight:700;font-size:0.82rem;color:#1d6fa4;" onclick="event.stopPropagation();">'
+                + $('<div>').text(cf.FileNumber||'').html() + '</a></td>'
+                + '<td style="padding:9px 14px;">' + $('<div>').text(cf.ClaimantName||'').html() + '</td>'
+                + '<td style="padding:9px 14px;font-size:0.8rem;">' + $('<div>').text(cf.Caseworker||'').html() + '</td>'
+                + '<td style="padding:9px 14px;font-size:0.8rem;color:#64748b;">' + $('<div>').text(cf.CaseStatus||'').html() + '</td>'
+                + '<td style="padding:9px 14px;text-align:center;">' + cf.Count + '</td>'
+                + '<td style="padding:9px 14px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;color:#dc2626;">RM ' + kendo.toString(cf.TotalAmount,'n2') + '</td>'
+                + '</tr>');
+
+            // Hidden sub-rows
+            (cf.Items || []).forEach(function(item) {
+                var disbDate = item.DisbursementDate ? kendo.toString(kendo.parseDate(item.DisbursementDate),'dd/MM/yyyy') : '—';
+                tbody.append('<tr id="' + rowId + '" style="display:none;background:#fffbeb;border-bottom:1px solid #fef3c7;">'
+                    + '<td></td>'
+                    + '<td colspan="2" style="padding:7px 14px 7px 28px;font-size:0.78rem;color:#92400e;">' + disbDate + '</td>'
+                    + '<td style="padding:7px 14px;font-size:0.78rem;color:#64748b;">' + $('<div>').text(item.DisbursementCategory||'').html() + '</td>'
+                    + '<td style="padding:7px 14px;font-size:0.78rem;" colspan="2">' + $('<div>').text(item.Description||'').html() + '</td>'
+                    + '<td style="padding:7px 14px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">RM ' + kendo.toString(item.Amount,'n2') + '</td>'
+                    + '</tr>');
+            });
+        });
+
+        // Full detail
+        var tbody2 = $('#tbodyDetail').empty();
+        var grandTotalAmt = 0;
+        (r.rows || []).forEach(function(d, i) {
+            grandTotalAmt += d.Amount || 0;
+            var disbDate = d.DisbursementDate ? kendo.toString(kendo.parseDate(d.DisbursementDate),'dd/MM/yyyy') : '—';
+            var desc = d.Description && d.Description.length > 45 ? d.Description.substring(0,45)+'…' : (d.Description||'—');
+            tbody2.append('<tr style="border-bottom:1px solid #f1f5f9;' + (i%2===0?'':'background:#f8fafc;') + '">'
+                + '<td style="padding:8px 14px;"><a href="@Url.Action("EditCase","Case")?id=' + d.Id
+                + '" style="font-family:monospace;font-weight:700;font-size:0.82rem;color:#1d6fa4;">'
+                + $('<div>').text(d.FileNumber||'').html() + '</a></td>'
+                + '<td style="padding:8px 14px;font-size:0.8rem;">' + $('<div>').text(d.ClaimantName||'').html() + '</td>'
+                + '<td style="padding:8px 14px;text-align:center;">' + disbDate + '</td>'
+                + '<td style="padding:8px 14px;font-size:0.78rem;">' + $('<div>').text(d.DisbursementCategory||'').html() + '</td>'
+                + '<td style="padding:8px 14px;font-size:0.8rem;" title="' + $('<div>').text(d.Description||'').html() + '">' + $('<div>').text(desc).html() + '</td>'
+                + '<td style="padding:8px 14px;font-size:0.8rem;">' + $('<div>').text(d.Payee||'').html() + '</td>'
+                + '<td style="padding:8px 14px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;color:#dc2626;">RM ' + kendo.toString(d.Amount,'n2') + '</td>'
+                + '</tr>');
+        });
+        $('#tfootAmt').text('RM ' + kendo.toString(grandTotalAmt,'n2'));
+        $('#tfootRow').show();
+
+        $('#reportResults').show();
+        $('#btnExcel').prop('disabled', false);
+    }).fail(function(){ $('#reportLoading').hide(); KSwal.error('Error','Server error.'); });
+}
+
+function toggleItems(rowId) {
+    var rows = $('tr[id="' + rowId + '"]');
+    var icon = $('#icon_' + rowId);
+    var isVisible = rows.first().is(':visible');
+    rows.toggle(!isVisible);
+    icon.css('transform', isVisible ? '' : 'rotate(90deg)');
+}
+
+function exportExcel() {
+    var p = getParams();
+    var form = $('<form method="POST" action="@Url.Action("UnrecoveredDisbursementsExcel","FinancialReport")">');
+    $.each(p, function(k,v){ form.append($('<input type="hidden">').attr('name',k).val(v)); });
+    $('body').append(form); form.submit(); form.remove();
+    KSwal.toast('info','Preparing Excel file...');
+}
+</script>
+}
