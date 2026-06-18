@@ -1,9 +1,11 @@
+//HearingStage
 namespace MVAManagement.Models.MVA
 {
     /// <summary>
     /// Lookup table defining the type or stage of a court hearing within litigation.
     /// Examples: Mention (M), Full Hearing (H), Case Management (CM), Settlement Conference (SC).
     /// </summary>
+    //HearingStage
     public class HearingStage
     {
         public int Id { get; set; }

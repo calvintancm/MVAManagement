@@ -1,3 +1,4 @@
+//InjuryRecord
 namespace MVAManagement.Models.MVA
 {
     /// <summary>

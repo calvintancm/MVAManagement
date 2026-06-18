@@ -1,3 +1,4 @@
+//CaseJournal
 namespace MVAManagement.Models.MVA
 {
     /// <summary>

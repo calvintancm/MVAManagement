@@ -1,3 +1,4 @@
+//CaseCorrespondence
 namespace MVAManagement.Models.MVA
 {
     /// <summary>

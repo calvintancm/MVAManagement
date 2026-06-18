@@ -115,12 +115,12 @@ builder.Services.AddAuthentication(
 // [Authorize(Roles = "Admin,IGH")] still works as before —
 // these policies are an optional convenience on top.
 // ────────────────────────────────────────────────────────────────
-builder.Services.AddAuthorization(options =>
-{
-    options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
-    options.AddPolicy("IGHOnly", policy => policy.RequireRole("Admin", "IGH"));
-    options.AddPolicy("HROnly", policy => policy.RequireRole("Admin", "HR"));
-});
+//builder.Services.AddAuthorization(options =>
+//{
+//    options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
+//    options.AddPolicy("IGHOnly", policy => policy.RequireRole("Admin", "IGH"));
+//    options.AddPolicy("HROnly", policy => policy.RequireRole("Admin", "HR"));
+//});
 
 /*  Session  */
 builder.Services.AddSession(options =>
@@ -189,54 +189,67 @@ var app = builder.Build();
 // and BEFORE app.UseHttpsRedirection();
 // ═══════════════════════════════════════════════════════════════
 
-using (var scope = app.Services.CreateScope())
-{
-    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+//using (var scope = app.Services.CreateScope())
+//{
+//    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+//    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
 
-    // ── Ensure all required roles exist ──────────────────────────
-    var requiredRoles = new[] { "Admin", "Solicitor", "Caseworker", "Finance" };
-    foreach (var roleName in requiredRoles)
-    {
-        if (!await roleManager.RoleExistsAsync(roleName))
-        {
-            await roleManager.CreateAsync(new IdentityRole(roleName));
-            Console.WriteLine($"[Seed] Role '{roleName}' created.");
-        }
-    }
+//    // ── Ensure all required roles exist ──────────────────────────
+//    var requiredRoles = new[] { "Admin", "Solicitor", "Caseworker", "Finance" };
+//    foreach (var roleName in requiredRoles)
+//    {
+//        if (!await roleManager.RoleExistsAsync(roleName))
+//        {
+//            await roleManager.CreateAsync(new IdentityRole(roleName));
+//            Console.WriteLine($"[Seed] Role '{roleName}' created.");
+//        }
+//    }
 
-    // ── Assign Admin role to your user ────────────────────────────
-    // CHANGE THIS to your actual username or email
-    var adminUsername = "tancm.mi";   // ← replace with your username
+//    // ── Assign Admin role to your user ────────────────────────────
+//    var adminEmail = "user@mvalegal.com.my";   // ← replace with your username/email
+//    var adminPassword = "XYZxyz$=01"; // ← replace with a secure password
 
-    var adminUser = await userManager.FindByNameAsync(adminUsername)
-                 ?? await userManager.FindByEmailAsync(adminUsername);
+//    var adminUser = await userManager.FindByEmailAsync(adminEmail);
 
-    if (adminUser != null)
-    {
-        if (!await userManager.IsInRoleAsync(adminUser, "Admin"))
-        {
-            await userManager.AddToRoleAsync(adminUser, "Admin");
-            Console.WriteLine($"[Seed] Admin role assigned to '{adminUser.UserName}'.");
-        }
-        else
-        {
-            Console.WriteLine($"[Seed] '{adminUser.UserName}' already has Admin role.");
-        }
-    }
-    else
-    {
-        Console.WriteLine($"[Seed] WARNING: User '{adminUsername}' not found. Check username.");
-    }
-}
+//    if (adminUser == null)
+//    {
+//        // Create the user with password
+//        adminUser = new ApplicationUser
+//        {
+//            UserName = adminEmail,
+//            Email = adminEmail
+            
+//        };
+
+//        var createResult = await userManager.CreateAsync(adminUser, adminPassword);
+//        if (createResult.Succeeded)
+//        {
+//            Console.WriteLine($"[Seed] User '{adminEmail}' created with password.");
+//        }
+//        else
+//        {
+//            Console.WriteLine($"[Seed] ERROR creating user: {string.Join(",", createResult.Errors.Select(e => e.Description))}");
+//        }
+//    }
+
+//    // Ensure Admin role is assigned
+//    if (!await userManager.IsInRoleAsync(adminUser, "Admin"))
+//    {
+//        await userManager.AddToRoleAsync(adminUser, "Admin");
+//        Console.WriteLine($"[Seed] Admin role assigned to '{adminUser.UserName}'.");
+//    }
+//    else
+//    {
+//        Console.WriteLine($"[Seed] '{adminUser.UserName}' already has Admin role.");
+//    }
+//}
 
 
-
-if (!app.Environment.IsDevelopment())
-{
-    app.UseExceptionHandler("/Home/Error");
-    app.UseHsts();
-}
+//if (!app.Environment.IsDevelopment())
+//{
+//    app.UseExceptionHandler("/Home/Error");
+//    app.UseHsts();
+//}
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();

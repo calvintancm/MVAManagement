@@ -72,7 +72,118 @@ namespace MVAManagement.Controllers
             ViewBag.ReturnUrl = returnUrl;
             if (!ModelState.IsValid) return View(model);
 
-            var user = await _userManager.FindByNameAsync(model.UserName.Trim());
+            // Lookup by Email (preferred)
+            var user = await _userManager.FindByEmailAsync(model.UserName.Trim());
+
+            if (user == null)
+            {
+                _logger.LogWarning("Login failed — unknown email: {User}", model.UserName);
+                TempData["ErrorMessage"] = "Invalid username or password.";
+                return View(model);
+            }
+
+            if (await _userManager.IsLockedOutAsync(user))
+            {
+                _logger.LogWarning("Locked-out login attempt: {User}", model.UserName);
+                TempData["ErrorMessage"] = "Account is temporarily locked. Please try again later.";
+                return View(model);
+            }
+
+            var passwordOk = await _userManager.CheckPasswordAsync(user, model.Password);
+            if (!passwordOk)
+            {
+                await _userManager.AccessFailedAsync(user);
+                _logger.LogWarning("Login failed — wrong password for: {User}", model.UserName);
+                TempData["ErrorMessage"] = "Invalid username or password.";
+                return View(model);
+            }
+
+            await _userManager.ResetAccessFailedCountAsync(user);
+
+            var roles = await _userManager.GetRolesAsync(user);
+
+            // Use Email consistently in claims
+            var claims = new List<Claim>
+    {
+        new Claim(ClaimTypes.NameIdentifier, user.Id),
+        new Claim(ClaimTypes.Name, user.Email ?? model.UserName),   // FIXED
+        new Claim(ClaimTypes.Email, user.Email ?? string.Empty),
+    };
+            foreach (var role in roles)
+                claims.Add(new Claim(ClaimTypes.Role, role));
+
+            var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+            var principal = new ClaimsPrincipal(identity);
+
+            var authProps = new AuthenticationProperties
+            {
+                IsPersistent = model.RememberMe,
+                ExpiresUtc = model.RememberMe ? DateTimeOffset.UtcNow.AddHours(8) : (DateTimeOffset?)null,
+                AllowRefresh = true
+            };
+
+            await HttpContext.SignInAsync(
+                CookieAuthenticationDefaults.AuthenticationScheme, principal, authProps);
+
+            // Update LastLoginAt
+            user.LastLoginAt = DateTime.UtcNow;
+            await _userManager.UpdateAsync(user);
+
+            // Audit log
+            var sessionId = Guid.NewGuid().ToString();
+            HttpContext.Session.SetString("AuditSessionId", sessionId);
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "";
+            var userAgent = HttpContext.Request.Headers["User-Agent"].ToString();
+            var computerName = string.Empty;
+            try
+            {
+                var ipAddr = HttpContext.Connection.RemoteIpAddress;
+                if (ipAddr != null)
+                {
+                    var hostEntry = await System.Net.Dns.GetHostEntryAsync(ipAddr);
+                    computerName = hostEntry.HostName;
+                }
+            }
+            catch { /* non-critical */ }
+
+            _db.AuditSessionLogs.Add(new AuditSessionLog
+            {
+                UserId = user.Id,
+                Username = user.Email ?? model.UserName,   // FIXED
+                SessionId = sessionId,
+                IpAddress = ip,
+                ComputerName = computerName,
+                UserAgent = userAgent,
+                LoginTime = DateTime.UtcNow,
+                IsActive = true,
+                IsFlaggedSuspicious = false
+            });
+            await _db.SaveChangesAsync();
+
+            HttpContext.Session.SetString("UserName", user.Email ?? model.UserName);   // FIXED
+            HttpContext.Session.SetString("UserEmail", user.Email ?? string.Empty);
+            HttpContext.Session.SetString("UserRoles", string.Join(",", roles));
+
+            _logger.LogInformation("User {User} logged in. Roles: [{Roles}]",
+                user.Email, string.Join(", ", roles));   // FIXED
+
+            return RedirectToLocal(returnUrl);
+        }
+
+
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Login2(LoginViewModel model, string returnUrl = null)
+        {
+            ViewBag.ReturnUrl = returnUrl;
+            if (!ModelState.IsValid) return View(model);
+
+           // var user = await _userManager.FindByNameAsync(model.UserName.Trim());
+
+            var user = await _userManager.FindByEmailAsync(model.UserName.Trim());
+
 
             if (user == null)
             {
@@ -102,11 +213,12 @@ namespace MVAManagement.Controllers
             var roles = await _userManager.GetRolesAsync(user);
 
             var claims = new List<Claim>
-    {
-        new Claim(ClaimTypes.NameIdentifier, user.Id),
-        new Claim(ClaimTypes.Name,           user.UserName ?? model.UserName),
-        new Claim(ClaimTypes.Email,          user.Email    ?? string.Empty),
-    };
+            {
+                new Claim(ClaimTypes.NameIdentifier, user.Id),
+                new Claim(ClaimTypes.Name, user.Email ?? model.UserName),   // use Email here
+                new Claim(ClaimTypes.Email, user.Email ?? string.Empty),
+            };
+
             foreach (var role in roles)
                 claims.Add(new Claim(ClaimTypes.Role, role));
 
@@ -237,17 +349,18 @@ public async Task<IActionResult> Logout()
         [HttpGet]
         public async Task<IActionResult> UserProfile()
         {
-            var userName = User.Identity?.Name ?? "user";
-            var user     = await _userManager.FindByNameAsync(userName);
+            // Use Email claim instead of Name
+            var email = User.FindFirstValue(ClaimTypes.Email);
+            var user = await _userManager.FindByEmailAsync(email);
 
-            string firstName = userName;
-            string lastName  = string.Empty;
+            string firstName = email;
+            string lastName = string.Empty;
 
-            if (userName.Contains('.'))
+            if (email.Contains('.'))
             {
-                var parts = userName.Split('.');
+                var parts = email.Split('@')[0].Split('.');
                 firstName = parts[0];
-                lastName  = parts.Length > 1 ? parts[1] : string.Empty;
+                lastName = parts.Length > 1 ? parts[1] : string.Empty;
             }
 
             var roles = user != null
@@ -256,15 +369,18 @@ public async Task<IActionResult> Logout()
 
             var model = new UserProfileView
             {
-                UserName    = userName,
-                Email       = user?.Email ?? $"{userName}@mvalegal.com.my",
-                FirstName   = firstName,
-                LastName    = lastName,
+                UserName = user?.UserName ?? email,
+                Email = user?.Email ?? email,
+                FirstName = firstName,
+                LastName = lastName,
                 PhoneNumber = user?.PhoneNumber ?? string.Empty
             };
 
             return View(model);
         }
+
+
+      
 
         // ─────────────────────────────────────────────────────────────────
         // GET /Account/Preferences

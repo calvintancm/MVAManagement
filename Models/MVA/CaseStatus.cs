@@ -1,3 +1,4 @@
+//CaseStatus
 namespace MVAManagement.Models.MVA
 {
     /// <summary>
@@ -17,7 +18,7 @@ namespace MVAManagement.Models.MVA
         /// <summary>Display order for dropdowns and status pipelines.</summary>
         public int DisplayOrder { get; set; }
 
-        // Navigation Property
+        //Navigation Property
         public virtual ICollection<CaseFile> CaseFiles { get; set; } = new List<CaseFile>();
     }
 }

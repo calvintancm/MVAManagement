@@ -1,3 +1,5 @@
+
+//CaseFile
 namespace MVAManagement.Models.MVA
 {
     /// <summary>
@@ -148,7 +150,7 @@ namespace MVAManagement.Models.MVA
             && !IsInLitigation
             && DateTime.Today > StatuteOfLimitationsDeadline.Value;
 
-        // ── NAVIGATION PROPERTIES — LOOKUPS ──────────────────────────────────
+        // ── NAVIGATION PROPERTIES — LOOKUPS ────────
 
         public virtual CaseStatus? CaseStatus { get; set; }
         public virtual HearingStage? CurrentHearingStage { get; set; }
