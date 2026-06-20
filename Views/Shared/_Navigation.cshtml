@@ -8,8 +8,8 @@
 @* ── Nav permission flags ── *@
 @{
     var currentUsername  = User.Identity?.Name ?? "";
-    // bool isAdmin         = User.IsInRole("Admin");
-    bool isAdmin         = true;
+    bool isAdmin         = User.IsInRole("Admin");
+  
     bool isSolicitor     = User.IsInRole("Admin") || User.IsInRole("Solicitor");
     bool isCaseworker    = User.IsInRole("Admin") || User.IsInRole("Solicitor") || User.IsInRole("Caseworker");
     bool canViewFinance  = User.IsInRole("Admin") || User.IsInRole("Solicitor") || User.IsInRole("Finance");
@@ -1505,13 +1505,12 @@
             }
 
             /* ── Custom popup showing roles ── */
-            if (typeof KSwal !== 'undefined') {
+            // if (typeof KSwal !== 'undefined') {
                 
-                 KSwal.toast('Info', 'Username: @currentUsername | isAdmin: @isAdmin.ToString().ToLower() | canViewFinance: @canViewFinance.ToString().ToLower()');
-
+            //      KSwal.toast('Info', 'Username: @currentUsername | isAdmin: @isAdmin.ToString().ToLower() | canViewFinance: @canViewFinance.ToString().ToLower()');
 
                
-            }
+            // }
 
         });
     }());

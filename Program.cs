@@ -89,6 +89,7 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
 .AddDefaultTokenProviders();                      // needed if you ever send reset emails
 
 /*  Cookie Auth  */
+/*  Cookie Auth  */
 builder.Services.AddAuthentication(
     Microsoft.AspNetCore.Authentication.Cookies
         .CookieAuthenticationDefaults.AuthenticationScheme)
@@ -100,8 +101,10 @@ builder.Services.AddAuthentication(
         options.SlidingExpiration = true;
         options.ExpireTimeSpan = TimeSpan.FromMinutes(60);
         options.Cookie.HttpOnly = true;
-        options.Cookie.SecurePolicy =
-            Microsoft.AspNetCore.Http.CookieSecurePolicy.Always;
+
+        // ── FIX: was CookieSecurePolicy.Always which drops cookie over HTTP (LAN)
+        // Use SameAsRequest so HTTP LAN access works, HTTPS still works too
+        options.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.SameAsRequest;
     });
 
 // ────────────────────────────────────────────────────────────────
@@ -218,7 +221,7 @@ var app = builder.Build();
 //        {
 //            UserName = adminEmail,
 //            Email = adminEmail
-            
+
 //        };
 
 //        var createResult = await userManager.CreateAsync(adminUser, adminPassword);
@@ -251,10 +254,10 @@ var app = builder.Build();
 //    app.UseHsts();
 //}
 
-app.UseHttpsRedirection();
+//app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
-app.UseSession();        /* ← MUST be before UseAuthentication */
+app.UseSession();
 app.UseAuthentication();
 app.UseAuthorization();
 
